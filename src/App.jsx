@@ -47,7 +47,15 @@ const wizardSteps = [
   { key: 'grid', label: '设置网格' },
   { key: 'target', label: '选择目标参考图' },
   { key: 'cards', label: '选择移动卡片' },
-  { key: 'teach', label: '教学演示' },
+  { key: 'teach', label: '选择演示入口' },
+];
+
+const gridTemplates = [
+  [2, 2],
+  [2, 4],
+  [2, 5],
+  [3, 3],
+  [4, 4],
 ];
 
 const roleLabels = {
@@ -321,6 +329,431 @@ function toggleIndex(list, index) {
 
 function addIndices(list, indices) {
   return [...new Set([...list, ...indices])].sort((a, b) => a - b);
+}
+
+function MobileTopBar({
+  title,
+  meta,
+  backLabel = '返回',
+  primaryLabel,
+  onBack,
+  onPrimary,
+  primaryDisabled = false,
+}) {
+  return (
+    <div className="mobile-top-bar" aria-label="手机端当前步骤导航">
+      {onBack ? (
+        <button type="button" className="mobile-top-action" onClick={onBack}>
+          {backLabel}
+        </button>
+      ) : (
+        <span className="mobile-top-spacer" aria-hidden="true" />
+      )}
+      <div className="mobile-top-title">
+        <strong>{title}</strong>
+        {meta && <span>{meta}</span>}
+      </div>
+      {onPrimary ? (
+        <button type="button" className="mobile-top-action primary" onClick={onPrimary} disabled={primaryDisabled}>
+          {primaryLabel}
+        </button>
+      ) : (
+        <span className="mobile-top-spacer" aria-hidden="true" />
+      )}
+    </div>
+  );
+}
+
+function MobileBottomTabs({ tabs, activeTab, onTabChange, children, className = '' }) {
+  return (
+    <div className={`mobile-bottom-drawer ${className}`} aria-label="手机端底部操作区">
+      {tabs?.length > 1 && (
+        <div className="mobile-tab-list" role="tablist" aria-label="操作分组">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              className={tab.key === activeTab ? 'mobile-tab-button active' : 'mobile-tab-button'}
+              aria-selected={tab.key === activeTab}
+              onClick={() => onTabChange(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="mobile-tab-panel">{children}</div>
+    </div>
+  );
+}
+
+function MobileGridControls({
+  rows,
+  cols,
+  templates,
+  applyGridTemplate,
+  adjustRows,
+  adjustCols,
+  recenterGridBox,
+  canRecenter,
+}) {
+  return (
+    <div className="mobile-grid-controls">
+      <div className="mobile-template-row">
+        {templates.map(([templateRows, templateCols]) => (
+          <button
+            key={`${templateRows}-${templateCols}`}
+            type="button"
+            className={rows === templateRows && cols === templateCols ? 'active' : ''}
+            onClick={() => applyGridTemplate(templateRows, templateCols)}
+          >
+            {templateRows}×{templateCols}
+          </button>
+        ))}
+      </div>
+      <div className="mobile-stepper-row">
+        <button type="button" onClick={() => adjustRows(-1)} disabled={rows <= 1}>
+          行数 -
+        </button>
+        <button type="button" onClick={() => adjustRows(1)} disabled={rows >= 8}>
+          行数 +
+        </button>
+        <button type="button" onClick={() => adjustCols(-1)} disabled={cols <= 1}>
+          列数 -
+        </button>
+        <button type="button" onClick={() => adjustCols(1)} disabled={cols >= 8}>
+          列数 +
+        </button>
+        <button type="button" onClick={recenterGridBox} disabled={!canRecenter}>
+          居中网格
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MobileTeachingControls({
+  activeTab,
+  setActiveTab,
+  selectedCard,
+  cards,
+  selectedId,
+  focusSelectedOnly,
+  setFocusSelectedOnly,
+  showTargetReference,
+  setShowTargetReference,
+  targetOpacity,
+  setTargetOpacity,
+  selectAdjacentCard,
+  selectCard,
+  moveCard,
+  moveDistance,
+  setMoveDistance,
+  rotateCard,
+  centerKey,
+  centers,
+  changeCenter,
+  clearAllMotionTraces,
+  resetCurrentCard,
+  resetTeachingCards,
+  motionTraces,
+  animationTrace,
+}) {
+  const tabs = [
+    { key: 'cards', label: '卡片' },
+    { key: 'move', label: '平移' },
+    { key: 'rotate', label: '旋转' },
+    { key: 'reset', label: '轨迹' },
+  ];
+
+  return (
+    <MobileBottomTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} className="mobile-teaching-drawer">
+      {activeTab === 'cards' && (
+        <div className="mobile-control-grid cards-tab">
+          <button type="button" onClick={() => selectAdjacentCard(-1)} disabled={cards.length < 2}>
+            上一张
+          </button>
+          <button type="button" onClick={() => selectAdjacentCard(1)} disabled={cards.length < 2}>
+            下一张
+          </button>
+          <button type="button" className={focusSelectedOnly ? 'active' : ''} onClick={() => setFocusSelectedOnly(true)}>
+            只看当前
+          </button>
+          <button type="button" className={!focusSelectedOnly ? 'active' : ''} onClick={() => setFocusSelectedOnly(false)}>
+            显示全部
+          </button>
+          <select value={selectedId} onChange={(event) => selectCard(Number(event.target.value))}>
+            {cards.map((card) => (
+              <option key={card.id} value={card.id}>
+                卡片 {card.id}
+              </option>
+            ))}
+          </select>
+          <label className="mobile-inline-toggle">
+            <input
+              type="checkbox"
+              checked={showTargetReference}
+              onChange={(event) => setShowTargetReference(event.target.checked)}
+            />
+            目标图
+          </label>
+          <label className="mobile-range-control">
+            透明度 {targetOpacity}%
+            <input
+              type="range"
+              min="20"
+              max="70"
+              step="5"
+              value={targetOpacity}
+              onChange={(event) => setTargetOpacity(Number(event.target.value))}
+            />
+          </label>
+        </div>
+      )}
+      {activeTab === 'move' && (
+        <div className="mobile-move-panel">
+          <div className="mobile-move-pad">
+            <button type="button" className="move-up" onClick={() => moveCard('up')} title="上移">
+              <ArrowUp size={24} />
+              上移
+            </button>
+            <button type="button" className="move-left" onClick={() => moveCard('left')} title="左移">
+              <ArrowLeft size={24} />
+              左移
+            </button>
+            <button type="button" className="move-right" onClick={() => moveCard('right')} title="右移">
+              <ArrowRight size={24} />
+              右移
+            </button>
+            <button type="button" className="move-down" onClick={() => moveCard('down')} title="下移">
+              <ArrowDown size={24} />
+              下移
+            </button>
+          </div>
+          <div className="mobile-segment-row" aria-label="平移步长">
+            <span>步长</span>
+            {[0.5, 1, 2].map((distance) => (
+              <button
+                key={distance}
+                type="button"
+                className={moveDistance === distance ? 'active' : ''}
+                onClick={() => setMoveDistance(distance)}
+              >
+                {distance}格
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {activeTab === 'rotate' && (
+        <div className="mobile-control-grid rotate-tab">
+          <select value={centerKey} onChange={(event) => changeCenter(event.target.value)}>
+            {Object.entries(centers).map(([key, center]) => (
+              <option value={key} key={key}>
+                {center.label}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={() => rotateCard(90, '顺时针旋转 90°')}>
+            <RotateCw size={20} />
+            顺时针90°
+          </button>
+          <button type="button" onClick={() => rotateCard(-90, '逆时针旋转 90°')}>
+            <RotateCcw size={20} />
+            逆时针90°
+          </button>
+          <button type="button" onClick={() => rotateCard(180, '旋转 180°')}>
+            <RotateCw size={20} />
+            旋转180°
+          </button>
+        </div>
+      )}
+      {activeTab === 'reset' && (
+        <div className="mobile-control-grid reset-tab">
+          <button type="button" className="danger-action" onClick={clearAllMotionTraces} disabled={!motionTraces.length && !animationTrace}>
+            清除轨迹
+          </button>
+          <button type="button" onClick={resetCurrentCard} disabled={!selectedCard}>
+            重置当前
+          </button>
+          <button type="button" className="danger-action" onClick={resetTeachingCards}>
+            重置全部
+          </button>
+        </div>
+      )}
+    </MobileBottomTabs>
+  );
+}
+
+function MobileStepControls({
+  activeTab,
+  setActiveTab,
+  cards,
+  stepDraft,
+  updateStepDraft,
+  addDemoStep,
+  demoSteps,
+  currentStepIndex,
+  setCurrentStepIndex,
+  describeDemoStep,
+  playbackStatus,
+  playAllDemoSteps,
+  playSingleDemoStep,
+  pausePlayback,
+  continuePlayback,
+  previousDemoStep,
+  resetDemoToStart,
+  moveDemoStep,
+  editDemoStep,
+  deleteDemoStep,
+  clearDemoSteps,
+  editingStepId,
+}) {
+  const tabs = [
+    { key: 'play', label: '播放' },
+    { key: 'add', label: editingStepId ? '编辑' : '添加' },
+    { key: 'list', label: '列表' },
+  ];
+
+  return (
+    <MobileBottomTabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} className="mobile-steps-drawer">
+      {activeTab === 'play' && (
+        <div className="mobile-control-grid playback-tab">
+          <button type="button" onClick={() => playAllDemoSteps(0)} disabled={!demoSteps.length || playbackStatus === 'playing'}>
+            播放全部
+          </button>
+          <button type="button" onClick={playSingleDemoStep} disabled={!demoSteps.length || playbackStatus === 'playing'}>
+            播放当前
+          </button>
+          <button type="button" onClick={previousDemoStep} disabled={!demoSteps.length}>
+            上一步
+          </button>
+          <button type="button" onClick={playSingleDemoStep} disabled={!demoSteps.length || playbackStatus === 'playing'}>
+            下一步
+          </button>
+          <button type="button" onClick={pausePlayback} disabled={playbackStatus !== 'playing' && playbackStatus !== 'stepping'}>
+            暂停
+          </button>
+          <button type="button" onClick={continuePlayback} disabled={playbackStatus !== 'paused'}>
+            继续
+          </button>
+          <button type="button" onClick={() => resetDemoToStart(true)}>
+            重置演示
+          </button>
+        </div>
+      )}
+      {activeTab === 'add' && (
+        <div className="mobile-step-form">
+          <select value={stepDraft.cardId} onChange={(event) => updateStepDraft({ cardId: Number(event.target.value) })}>
+            {cards.map((card) => (
+              <option key={card.id} value={card.id}>
+                卡片{card.id}
+              </option>
+            ))}
+          </select>
+          <div className="mobile-segment-row">
+            <button
+              type="button"
+              className={stepDraft.action === 'move' ? 'active' : ''}
+              onClick={() => updateStepDraft({ action: 'move' })}
+            >
+              平移
+            </button>
+            <button
+              type="button"
+              className={stepDraft.action === 'rotate' ? 'active' : ''}
+              onClick={() => updateStepDraft({ action: 'rotate' })}
+            >
+              旋转
+            </button>
+          </div>
+          {stepDraft.action === 'move' ? (
+            <>
+              <select value={stepDraft.moveDirection} onChange={(event) => updateStepDraft({ moveDirection: event.target.value })}>
+                {Object.entries(MOVE_DIRECTIONS).map(([key, meta]) => (
+                  <option key={key} value={key}>
+                    {meta.label.replace('向', '')}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={stepDraft.moveDistanceMode === 'custom' ? 'custom' : stepDraft.moveDistance}
+                onChange={(event) =>
+                  event.target.value === 'custom'
+                    ? updateStepDraft({ moveDistanceMode: 'custom' })
+                    : updateStepDraft({ moveDistanceMode: 'grid', moveDistance: Number(event.target.value) })
+                }
+              >
+                <option value="0.5">0.5格</option>
+                <option value="1">1格</option>
+                <option value="2">2格</option>
+                <option value="custom">自定义</option>
+              </select>
+              {stepDraft.moveDistanceMode === 'custom' && (
+                <input
+                  type="number"
+                  min="1"
+                  value={stepDraft.customPixels}
+                  onChange={(event) => updateStepDraft({ customPixels: Number(event.target.value) })}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <select value={stepDraft.rotateDirection} onChange={(event) => updateStepDraft({ rotateDirection: event.target.value })}>
+                {Object.entries(ROTATE_DIRECTIONS).map(([key, meta]) => (
+                  <option key={key} value={key}>
+                    {meta.label}
+                  </option>
+                ))}
+              </select>
+              <select value={stepDraft.rotateAngle} onChange={(event) => updateStepDraft({ rotateAngle: Number(event.target.value) })}>
+                <option value="90">90°</option>
+                <option value="180">180°</option>
+                <option value="270">270°</option>
+              </select>
+              <select value={stepDraft.rotationCenter} onChange={(event) => updateStepDraft({ rotationCenter: event.target.value })}>
+                {Object.entries(CENTER_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          <button type="button" className="primary-action" onClick={addDemoStep}>
+            {editingStepId ? '保存步骤' : '添加步骤'}
+          </button>
+        </div>
+      )}
+      {activeTab === 'list' && (
+        <div className="mobile-step-list">
+          {demoSteps.length === 0 ? (
+            <p className="empty-history">还没有演示步骤</p>
+          ) : (
+            demoSteps.map((step, index) => (
+              <article key={step.id} className={index === currentStepIndex ? 'active' : ''}>
+                <button type="button" className="step-main" onClick={() => setCurrentStepIndex(index)}>
+                  <strong>第{index + 1}步</strong>
+                  <span>{describeDemoStep(step)}</span>
+                </button>
+                <div className="mobile-step-actions">
+                  <button type="button" onClick={() => editDemoStep(step)}>编辑</button>
+                  <button type="button" onClick={() => moveDemoStep(step.id, -1)} disabled={index === 0}>上移</button>
+                  <button type="button" onClick={() => moveDemoStep(step.id, 1)} disabled={index === demoSteps.length - 1}>下移</button>
+                  <button type="button" className="danger-action" onClick={() => deleteDemoStep(step.id)}>删除</button>
+                </div>
+              </article>
+            ))
+          )}
+          <button type="button" className="danger-action" onClick={clearDemoSteps} disabled={!demoSteps.length}>
+            清空步骤
+          </button>
+        </div>
+      )}
+    </MobileBottomTabs>
+  );
 }
 
 function makeGridTeachingCards(region, indices) {
@@ -1183,6 +1616,9 @@ export default function App() {
   const [photo, setPhoto] = useState(null);
   const [mode, setMode] = useState('recognize');
   const [teachingMode, setTeachingMode] = useState('entry');
+  const [mobileTeachingTab, setMobileTeachingTab] = useState('cards');
+  const [mobileStepsTab, setMobileStepsTab] = useState('play');
+  const [mobileMoveDistance, setMobileMoveDistance] = useState(1);
   const [rows, setRows] = useState(DEFAULT_ROWS);
   const [cols, setCols] = useState(DEFAULT_COLS);
   const [cards, setCards] = useState(() => makeCards(DEFAULT_ROWS, DEFAULT_COLS));
@@ -1361,6 +1797,8 @@ export default function App() {
 
   function enterTeachingMode(nextMode) {
     setTeachingMode(nextMode);
+    if (nextMode === 'free') setMobileTeachingTab('move');
+    if (nextMode === 'steps') setMobileStepsTab('play');
     setFocusSelectedOnly(true);
     setShowTargetReference(true);
     setMotionTraces([]);
@@ -1410,6 +1848,14 @@ export default function App() {
     );
   }
 
+  function adjustRows(delta) {
+    handleRowsChange(rows + delta);
+  }
+
+  function adjustCols(delta) {
+    handleColsChange(cols + delta);
+  }
+
   function handleColsChange(value) {
     const nextCols = clampGridSize(value);
     setCols(nextCols);
@@ -1425,6 +1871,28 @@ export default function App() {
           : item,
       ),
     );
+  }
+
+  function applyGridTemplate(nextRows, nextCols) {
+    const normalizedRows = clampGridSize(nextRows);
+    const normalizedCols = clampGridSize(nextCols);
+    setRows(normalizedRows);
+    setCols(normalizedCols);
+    setCellRoles(makeDefaultCellRoles(normalizedRows, normalizedCols));
+    setTargetCellIndices([]);
+    setCardCellIndices([]);
+    setManualTargetRect(null);
+    setTargetDraftRect(null);
+    if (photo) {
+      setGridBox(makeDefaultGridBox(photo, normalizedRows, normalizedCols));
+    }
+    setActivity(`已切换为 ${normalizedRows}×${normalizedCols} 网格`);
+  }
+
+  function recenterGridBox() {
+    if (!photo) return;
+    setGridBox(makeDefaultGridBox(photo, rows, cols));
+    setActivity('网格框已重新居中');
   }
 
   function updateSelectedCard(updater) {
@@ -1742,9 +2210,24 @@ export default function App() {
     setActivity('目标参考图已清除');
   }
 
+  function undoTargetCellSelection() {
+    setTargetCellIndices((current) => current.slice(0, -1));
+    setActivity('已撤销一个目标图格子');
+  }
+
   function clearCardCells() {
     setCardCellIndices([]);
     setActivity('移动卡片已全部取消');
+  }
+
+  function selectAllNonTargetCells() {
+    if (!guidedGridRegion) return;
+    const allIndices = Array.from(
+      { length: guidedGridRegion.rows * guidedGridRegion.cols },
+      (_, index) => index,
+    );
+    setCardCellIndices(allIndices.filter((index) => !targetCellIndices.includes(index)));
+    setActivity('已选择全部非目标格作为移动卡片');
   }
 
   async function runAutoDetect() {
@@ -2404,30 +2887,32 @@ export default function App() {
     };
   }
 
-  function moveCard(direction) {
+  function moveCard(direction, distance = 1) {
     if (!selectedCard) return;
     const meta = moveMeta[direction];
     const selectedStepWidth = selectedCard.sourceRect ? selectedCard.sourceRect.width * sourceScale : cellWidth;
     const selectedStepHeight = selectedCard.sourceRect ? selectedCard.sourceRect.height * sourceScale : cellHeight;
     const from = { tx: selectedCard.tx, ty: selectedCard.ty };
     const to = {
-      tx: selectedCard.tx + meta.dx * selectedStepWidth,
-      ty: selectedCard.ty + meta.dy * selectedStepHeight,
+      tx: selectedCard.tx + meta.dx * selectedStepWidth * distance,
+      ty: selectedCard.ty + meta.dy * selectedStepHeight * distance,
     };
+    const moveLabel = meta.label.replace('1 格', `${distance} 格`);
+    const moveShort = distance === 1 ? meta.short : `${meta.short.replace('一格', '')}${distance}格`;
     const fromFrame = getCardDisplayFrame(selectedCard, from);
     const toFrame = getCardDisplayFrame(selectedCard, to);
     animateCard(
       selectedId,
       from,
       to,
-      (progress) => `卡片 ${selectedId} 正在${meta.label}：${Math.round(progress * 100)}%`,
-      `卡片 ${selectedId} ${meta.short}完成`,
+      (progress) => `卡片 ${selectedId} 正在${moveLabel}：${Math.round(progress * 100)}%`,
+      `卡片 ${selectedId} ${moveShort}完成`,
       'move',
       {
-        label: meta.label.replace(/\s/g, ''),
+        label: moveLabel.replace(/\s/g, ''),
         fromFrame,
         toFrame,
-        historyText: `卡片 ${selectedId}：${meta.label}`,
+        historyText: `卡片 ${selectedId}：${moveLabel}`,
       },
     );
   }
@@ -2894,10 +3379,219 @@ export default function App() {
       : null;
 
   const activeWizardStep = mode === 'teach' ? 'teach' : wizardStep;
+  const activeWizardIndex = Math.max(0, wizardSteps.findIndex((item) => item.key === activeWizardStep));
   const selectionPreviewIndices = cellSelectionDrag?.currentIndices ?? [];
   const playbackActive = ['playing', 'paused', 'stepping'].includes(playbackStatus);
   const activeDemoStep = demoSteps[currentStepIndex] ?? null;
   const activeStepText = teachingMode === 'steps' && activeDemoStep ? `第 ${currentStepIndex + 1} 步：${describeDemoStep(activeDemoStep)}` : '';
+  const stageInstruction =
+    mode !== 'teach' && wizardStep === 'target'
+      ? '请点击或拖拽选择最终要对齐的目标图区域。'
+      : mode !== 'teach' && wizardStep === 'cards'
+        ? '请选择需要平移或旋转的卡片。'
+        : mode !== 'teach' && wizardStep === 'grid'
+          ? '拖动蓝色外框覆盖题目网格，拖右下角调整大小。'
+          : '';
+  const mobileTitle =
+    mode === 'teach' && teachingMode === 'free'
+      ? '教学演示'
+      : mode === 'teach' && teachingMode === 'steps'
+        ? '演示步骤'
+        : mode === 'teach'
+          ? '选择入口'
+          : wizardStep === 'upload'
+            ? '上传图片'
+            : wizardStep === 'grid'
+              ? '设置网格'
+              : wizardStep === 'target'
+                ? '选择目标图'
+                : '选择移动卡片';
+  const mobileMeta =
+    mode === 'teach' && teachingMode === 'free'
+      ? `当前卡片：${selectedCard?.id ?? '-'} / ${cards.length || 0}`
+      : mode === 'teach' && teachingMode === 'steps'
+        ? `当前步骤：${demoSteps.length ? currentStepIndex + 1 : 0} / ${demoSteps.length}`
+        : activity;
+  const mobileBack =
+    mode === 'teach' && teachingMode !== 'entry'
+      ? returnToTeachingEntry
+      : mode === 'teach'
+        ? () => setWizardStep('cards')
+        : wizardStep === 'grid'
+          ? () => setWizardStep('upload')
+          : wizardStep === 'target'
+            ? () => setWizardStep('grid')
+            : wizardStep === 'cards'
+              ? () => setWizardStep('target')
+              : null;
+  const mobilePrimary =
+    mode === 'teach'
+      ? null
+      : wizardStep === 'upload'
+        ? goToGridStep
+        : wizardStep === 'grid'
+          ? confirmGridStep
+          : wizardStep === 'target'
+            ? confirmTargetStep
+            : startTeaching;
+  const mobilePrimaryLabel =
+    wizardStep === 'upload'
+      ? '下一步'
+      : wizardStep === 'grid'
+        ? '确认'
+        : wizardStep === 'target'
+          ? '确认'
+          : wizardStep === 'cards'
+            ? '完成'
+            : '';
+  const mobilePrimaryDisabled =
+    mode === 'teach'
+      ? false
+      : wizardStep === 'upload'
+        ? !photo
+        : wizardStep === 'grid'
+          ? !guidedGridRegion
+          : wizardStep === 'target'
+            ? !targetCellIndices.length
+            : !canEnterTeaching;
+  const mobileLayoutClass =
+    mode === 'teach' && teachingMode === 'free'
+      ? 'mobile-teaching-mode'
+      : mode === 'teach' && teachingMode === 'steps'
+        ? 'mobile-steps-mode'
+        : mode === 'teach' && teachingMode === 'entry'
+          ? 'mobile-entry-mode'
+          : `mobile-${wizardStep}-mode`;
+  const mobileBottomControls =
+    mode !== 'teach' && wizardStep === 'upload' ? (
+      <MobileBottomTabs tabs={[]} activeTab="upload" className="mobile-basic-drawer">
+        <div className="mobile-control-grid upload-tab">
+          <label className="mobile-upload-button">
+            <ImagePlus size={20} />
+            选择图片
+            <input type="file" accept="image/*" onChange={handleImageUpload} />
+          </label>
+          <button type="button" onClick={() => rotateCurrentPhoto(-90)} disabled={!photo}>
+            <RotateCcw size={20} />
+            左转90°
+          </button>
+          <button type="button" onClick={() => rotateCurrentPhoto(90)} disabled={!photo}>
+            <RotateCw size={20} />
+            右转90°
+          </button>
+          <button type="button" className="primary-action" onClick={goToGridStep} disabled={!photo}>
+            下一步
+          </button>
+        </div>
+      </MobileBottomTabs>
+    ) : mode !== 'teach' && wizardStep === 'grid' ? (
+      <MobileBottomTabs tabs={[]} activeTab="grid" className="mobile-grid-drawer">
+        <MobileGridControls
+          rows={rows}
+          cols={cols}
+          templates={gridTemplates}
+          applyGridTemplate={applyGridTemplate}
+          adjustRows={adjustRows}
+          adjustCols={adjustCols}
+          recenterGridBox={recenterGridBox}
+          canRecenter={!!photo}
+        />
+      </MobileBottomTabs>
+    ) : mode !== 'teach' && wizardStep === 'target' ? (
+      <MobileBottomTabs tabs={[]} activeTab="target" className="mobile-basic-drawer">
+        <div className="mobile-control-grid target-tab">
+          <button type="button" className="danger-action" onClick={clearTargetCells}>
+            清除选择
+          </button>
+          <button type="button" onClick={undoTargetCellSelection} disabled={!targetCellIndices.length}>
+            撤销
+          </button>
+          <button type="button" className="primary-action" onClick={confirmTargetStep} disabled={!targetCellIndices.length}>
+            确认目标图
+          </button>
+        </div>
+      </MobileBottomTabs>
+    ) : mode !== 'teach' && wizardStep === 'cards' ? (
+      <MobileBottomTabs tabs={[]} activeTab="cards" className="mobile-basic-drawer">
+        <div className="mobile-control-grid card-select-tab">
+          <button type="button" className="danger-action" onClick={clearCardCells}>
+            清除选择
+          </button>
+          <button type="button" onClick={selectAllNonTargetCells} disabled={!guidedGridRegion}>
+            全选非目标格
+          </button>
+          <button type="button" className="primary-action" onClick={startTeaching} disabled={!canEnterTeaching}>
+            进入演示入口
+          </button>
+        </div>
+      </MobileBottomTabs>
+    ) : mode === 'teach' && teachingMode === 'entry' ? (
+      <MobileBottomTabs tabs={[]} activeTab="entry" className="mobile-entry-drawer">
+        <div className="mobile-entry-actions">
+          <button type="button" className="mobile-entry-choice" onClick={() => enterTeachingMode('free')}>
+            <strong>教学演示</strong>
+            <span>现场手动移动和旋转卡片</span>
+          </button>
+          <button type="button" className="mobile-entry-choice" onClick={() => enterTeachingMode('steps')}>
+            <strong>演示步骤</strong>
+            <span>提前设置步骤并播放</span>
+          </button>
+        </div>
+      </MobileBottomTabs>
+    ) : mode === 'teach' && teachingMode === 'free' ? (
+      <MobileTeachingControls
+        activeTab={mobileTeachingTab}
+        setActiveTab={setMobileTeachingTab}
+        selectedCard={selectedCard}
+        cards={cards}
+        selectedId={selectedId}
+        focusSelectedOnly={focusSelectedOnly}
+        setFocusSelectedOnly={setFocusSelectedOnly}
+        showTargetReference={showTargetReference}
+        setShowTargetReference={setShowTargetReference}
+        targetOpacity={targetOpacity}
+        setTargetOpacity={setTargetOpacity}
+        selectAdjacentCard={selectAdjacentCard}
+        selectCard={selectCard}
+        moveCard={(direction) => moveCard(direction, mobileMoveDistance)}
+        moveDistance={mobileMoveDistance}
+        setMoveDistance={setMobileMoveDistance}
+        rotateCard={rotateCard}
+        centerKey={centerKey}
+        centers={centers}
+        changeCenter={changeCenter}
+        clearAllMotionTraces={clearAllMotionTraces}
+        resetCurrentCard={resetCurrentCard}
+        resetTeachingCards={resetTeachingCards}
+        motionTraces={motionTraces}
+        animationTrace={animationTrace}
+      />
+    ) : mode === 'teach' && teachingMode === 'steps' ? (
+      <MobileStepControls
+        activeTab={mobileStepsTab}
+        setActiveTab={setMobileStepsTab}
+        cards={cards}
+        stepDraft={stepDraft}
+        updateStepDraft={updateStepDraft}
+        addDemoStep={addDemoStep}
+        demoSteps={demoSteps}
+        currentStepIndex={currentStepIndex}
+        setCurrentStepIndex={setCurrentStepIndex}
+        describeDemoStep={describeDemoStep}
+        playbackStatus={playbackStatus}
+        playAllDemoSteps={playAllDemoSteps}
+        playSingleDemoStep={playSingleDemoStep}
+        pausePlayback={pausePlayback}
+        continuePlayback={continuePlayback}
+        previousDemoStep={previousDemoStep}
+        resetDemoToStart={resetDemoToStart}
+        moveDemoStep={moveDemoStep}
+        editDemoStep={editDemoStep}
+        deleteDemoStep={deleteDemoStep}
+        clearDemoSteps={clearDemoSteps}
+        editingStepId={editingStepId}
+      />
+    ) : null;
 
   const cardNodes = teachingRegion
     ? cards
@@ -3042,8 +3736,17 @@ export default function App() {
     : [];
 
   return (
-    <main className={`app-shell ${classroomMode ? 'classroom-mode' : ''}`}>
-      <section className="stage-panel" aria-label="图形运动演示画布">
+    <main className={`app-shell mobile-layout-active ${mobileLayoutClass} ${classroomMode ? 'classroom-mode' : ''}`}>
+      <MobileTopBar
+        title={mobileTitle}
+        meta={mobileMeta}
+        backLabel={mode === 'teach' && teachingMode !== 'entry' ? '入口' : '返回'}
+        primaryLabel={mobilePrimaryLabel}
+        onBack={mobileBack}
+        onPrimary={mobilePrimary}
+        primaryDisabled={mobilePrimaryDisabled}
+      />
+      <header className="app-header">
         <div className="stage-heading">
           <div>
             <p className="eyebrow">小学数学课堂演示</p>
@@ -3051,11 +3754,31 @@ export default function App() {
           </div>
           <div className="status-pill">{activity}</div>
         </div>
+        <ol className="top-step-nav" aria-label="操作步骤">
+          {wizardSteps.map((step, index) => {
+            const done = activeWizardIndex > index;
+            const active = activeWizardStep === step.key;
+            return (
+              <li
+                key={step.key}
+                className={[active ? 'active' : '', done ? 'done' : ''].join(' ')}
+              >
+                <span className="step-index">{done ? '✓' : index + 1}</span>
+                <span>{step.label}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </header>
+
+      <div className="workspace-grid">
+      <section className="stage-panel" aria-label="图形运动演示画布">
         {mode === 'teach' && activeStepText && (
           <div className="step-banner">
             {activeStepText}
           </div>
         )}
+        {stageInstruction && <div className="stage-instruction">{stageInstruction}</div>}
 
         {mode === 'recognize' ? (
           <svg
@@ -3119,6 +3842,11 @@ export default function App() {
               const displayRowLines = guidedGridRegion.rowLines.map((line) => gridY + line * photoScale);
               return (
                 <g className={`guided-grid-layer step-${wizardStep}`}>
+                  <path
+                    className="guided-grid-mask"
+                    fillRule="evenodd"
+                    d={`M 0 0 H ${STAGE_WIDTH} V ${STAGE_HEIGHT} H 0 Z M ${gridX} ${gridY} H ${gridX + gridW} V ${gridY + gridH} H ${gridX} Z`}
+                  />
                   {Array.from({ length: guidedGridRegion.rows }, (_, rowIndex) =>
                     Array.from({ length: guidedGridRegion.cols }, (_, colIndex) => {
                       const index = rowIndex * guidedGridRegion.cols + colIndex;
@@ -3491,30 +4219,17 @@ export default function App() {
         )}
       </section>
 
-      <aside className="control-panel" aria-label="控制面板">
-        <section className="panel-section">
-          <h2>当前步骤</h2>
-          <ol className="flow-list wizard-flow">
-            {wizardSteps.map((step, index) => (
-              <li
-                key={step.key}
-                className={[
-                  activeWizardStep === step.key ? 'active' : '',
-                  wizardSteps.findIndex((item) => item.key === activeWizardStep) > index ? 'done' : '',
-                ].join(' ')}
-              >
-                {step.label}
-              </li>
-            ))}
-          </ol>
-        </section>
+      <aside className="control-panel" aria-label="当前步骤操作面板">
 
         {mode !== 'teach' && wizardStep === 'upload' && (
-          <section className="panel-section">
-            <h2>上传图片</h2>
+          <section className="panel-section upload-card-section">
+            <h2>上传一道图形运动题</h2>
+            <p className="panel-help">
+              上传作业照片或截图后，可以选择网格、目标图和需要移动的卡片。
+            </p>
             <label className="upload-button">
               <ImagePlus size={24} />
-              <span>上传图片</span>
+              <span>选择图片</span>
               <input type="file" accept="image/*" onChange={handleImageUpload} />
             </label>
             {photo?.name && <p className="file-name">{photo.name}</p>}
@@ -3523,19 +4238,19 @@ export default function App() {
                 <div className="rotation-buttons">
                   <button type="button" onClick={() => rotateCurrentPhoto(-90)}>
                     <RotateCcw size={22} />
-                    逆时针 90°
+                    左转90°
                   </button>
                   <button type="button" onClick={() => rotateCurrentPhoto(90)}>
                     <RotateCw size={22} />
-                    顺时针 90°
+                    右转90°
                   </button>
                   <button type="button" onClick={() => rotateCurrentPhoto(180)}>
                     <RotateCw size={22} />
-                    旋转 180°
+                    旋转180°
                   </button>
                 </div>
                 <button className="wide-button primary-action" type="button" onClick={goToGridStep}>
-                  下一步
+                  下一步：设置网格
                 </button>
               </>
             )}
@@ -3545,6 +4260,22 @@ export default function App() {
         {mode !== 'teach' && wizardStep === 'grid' && (
           <section className="panel-section">
             <h2>设置网格</h2>
+            <p className="panel-help">默认推荐 2×5。可拖动图片上的蓝色网格框，右下角可缩放。</p>
+            <div className="grid-template-buttons" aria-label="常用网格">
+              {gridTemplates.map(([templateRows, templateCols]) => (
+                <button
+                  type="button"
+                  key={`${templateRows}-${templateCols}`}
+                  className={rows === templateRows && cols === templateCols ? 'active' : ''}
+                  onClick={() => applyGridTemplate(templateRows, templateCols)}
+                >
+                  {templateRows}×{templateCols}
+                </button>
+              ))}
+              <button type="button" className="secondary-template" onClick={() => setActivity('可直接修改行数和列数')}>
+                自定义
+              </button>
+            </div>
             <div className="number-grid">
               <label>
                 行数
@@ -3567,11 +4298,11 @@ export default function App() {
                 />
               </label>
             </div>
+            <button className="wide-button" type="button" onClick={recenterGridBox} disabled={!photo}>
+              重新居中网格
+            </button>
             <button className="wide-button primary-action" type="button" onClick={confirmGridStep} disabled={!guidedGridRegion}>
               确认网格
-            </button>
-            <button className="text-button" type="button" onClick={() => setWizardStep('upload')}>
-              返回上传
             </button>
           </section>
         )}
@@ -3579,15 +4310,16 @@ export default function App() {
         {mode !== 'teach' && wizardStep === 'target' && (
           <section className="panel-section">
             <h2>选择目标参考图</h2>
+            <p className="panel-help">请点击或拖拽选择最终要对齐的目标图区域。</p>
             <p className="step-note">已选择 {targetCellIndices.length} 个目标格</p>
-            <button className="wide-button" type="button" onClick={clearTargetCells}>
-              清除目标参考图
+            <button className="wide-button danger-action" type="button" onClick={clearTargetCells}>
+              清除选择
             </button>
             <button className="wide-button primary-action" type="button" onClick={confirmTargetStep} disabled={!targetCellIndices.length}>
               确认目标参考图
             </button>
             <button className="text-button" type="button" onClick={() => setWizardStep('grid')}>
-              返回设置网格
+              返回上一步
             </button>
           </section>
         )}
@@ -3595,15 +4327,16 @@ export default function App() {
         {mode !== 'teach' && wizardStep === 'cards' && (
           <section className="panel-section">
             <h2>选择移动卡片</h2>
+            <p className="panel-help">请选择需要平移或旋转的卡片。蓝色目标参考图不可再选为移动卡片。</p>
             <p className="step-note">已选择 {cardCellIndices.length} 张移动卡片</p>
-            <button className="wide-button" type="button" onClick={clearCardCells}>
-              全部取消
+            <button className="wide-button danger-action" type="button" onClick={clearCardCells}>
+              清除移动卡片选择
             </button>
             <button className="wide-button primary-action" type="button" onClick={startTeaching} disabled={!canEnterTeaching}>
-              进入教学模式
+              进入演示入口
             </button>
             <button className="text-button" type="button" onClick={() => setWizardStep('target')}>
-              返回目标参考图
+              返回上一步
             </button>
           </section>
         )}
@@ -3612,13 +4345,23 @@ export default function App() {
           <>
             {teachingMode === 'entry' && (
               <section className="panel-section entry-choice-section">
-                <h2>选择课堂入口</h2>
-                <button type="button" className="entry-choice-button" onClick={() => enterTeachingMode('free')}>
-                  进入教学演示
-                </button>
-                <button type="button" className="entry-choice-button" onClick={() => enterTeachingMode('steps')}>
-                  进入演示步骤
-                </button>
+                <h2>选择演示入口</h2>
+                <div className="entry-card-grid">
+                  <article className="entry-card">
+                    <h3>教学演示</h3>
+                    <p>适合老师现场手动移动、旋转卡片。</p>
+                    <button type="button" className="entry-choice-button" onClick={() => enterTeachingMode('free')}>
+                      进入教学演示
+                    </button>
+                  </article>
+                  <article className="entry-card">
+                    <h3>演示步骤</h3>
+                    <p>适合提前设置步骤，然后按顺序播放。</p>
+                    <button type="button" className="entry-choice-button" onClick={() => enterTeachingMode('steps')}>
+                      进入演示步骤
+                    </button>
+                  </article>
+                </div>
               </section>
             )}
 
@@ -3626,10 +4369,8 @@ export default function App() {
             <section className="panel-section presentation-section">
               <div className="record-heading">
                 <h2>演示步骤</h2>
-                <button type="button" className="text-button" onClick={returnToTeachingEntry}>
-                  返回入口选择
-                </button>
               </div>
+              <h3 className="panel-subtitle">添加步骤</h3>
               <div className="step-editor">
                 <label>
                   选择卡片
@@ -3740,6 +4481,7 @@ export default function App() {
                   </button>
                 )}
               </div>
+              <h3 className="panel-subtitle">步骤列表</h3>
               <ol className="demo-step-list">
                 {demoSteps.length === 0 ? (
                   <li className="empty-history">还没有演示步骤</li>
@@ -3754,17 +4496,13 @@ export default function App() {
                         <button type="button" onClick={() => moveDemoStep(step.id, -1)} disabled={index === 0}>上移步骤</button>
                         <button type="button" onClick={() => moveDemoStep(step.id, 1)} disabled={index === demoSteps.length - 1}>下移步骤</button>
                         <button type="button" onClick={() => editDemoStep(step)}>修改步骤</button>
-                        <button type="button" onClick={() => deleteDemoStep(step.id)}>删除步骤</button>
+                        <button type="button" className="danger-action" onClick={() => deleteDemoStep(step.id)}>删除步骤</button>
                       </div>
-                      <input
-                        value={step.note}
-                        onChange={(event) => updateDemoStep(step.id, { note: event.target.value })}
-                        aria-label={`修改第${index + 1}步说明`}
-                      />
                     </li>
                   ))
                 )}
               </ol>
+              <h3 className="panel-subtitle">播放控制</h3>
               <div className="playback-controls">
                 <button type="button" onClick={() => playAllDemoSteps(0)} disabled={!demoSteps.length || playbackStatus === 'playing'}>播放全部</button>
                 <button type="button" onClick={playSingleDemoStep} disabled={!demoSteps.length || playbackStatus === 'playing'}>播放当前步骤</button>
@@ -3774,8 +4512,12 @@ export default function App() {
                 <button type="button" onClick={playSingleDemoStep} disabled={!demoSteps.length || playbackStatus === 'playing'}>下一步</button>
                 <button type="button" onClick={() => resetDemoToStart(true)}>重置步骤演示</button>
               </div>
-              <button type="button" className="text-button" onClick={clearDemoSteps} disabled={!demoSteps.length}>
+              <button type="button" className="text-button danger-action" onClick={clearDemoSteps} disabled={!demoSteps.length}>
                 清空步骤
+              </button>
+              <h3 className="panel-subtitle">返回</h3>
+              <button type="button" className="text-button" onClick={returnToTeachingEntry}>
+                返回入口选择
               </button>
             </section>
             )}
@@ -3783,12 +4525,7 @@ export default function App() {
             {teachingMode === 'free' && (
             <>
             <section className="panel-section standard-controls-section">
-              <div className="record-heading">
-                <h2>当前选中卡片</h2>
-                <button type="button" className="text-button" onClick={returnToTeachingEntry}>
-                  返回入口选择
-                </button>
-              </div>
+              <h2>当前卡片</h2>
               <div className="selected-card-display">卡片 {selectedCard?.id ?? '-'}</div>
               <div className="card-nav-buttons">
                 <button type="button" onClick={() => selectAdjacentCard(-1)} disabled={cards.length < 2}>
@@ -3813,11 +4550,23 @@ export default function App() {
               <label className="toggle-row">
                 <input
                   type="checkbox"
+                  checked={!focusSelectedOnly}
+                  onChange={(event) => setFocusSelectedOnly(!event.target.checked)}
+                />
+                显示全部卡片
+              </label>
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
                   checked={focusSelectedOnly}
                   onChange={(event) => setFocusSelectedOnly(event.target.checked)}
                 />
                 只显示当前卡片
               </label>
+            </section>
+
+            <section className="panel-section standard-controls-section">
+              <h2>目标参考图</h2>
               <label className="toggle-row">
                 <input
                   type="checkbox"
@@ -3837,11 +4586,6 @@ export default function App() {
                   onChange={(event) => setTargetOpacity(Number(event.target.value))}
                 />
               </label>
-              <div className="trace-actions">
-                <button type="button" onClick={clearAllMotionTraces} disabled={!motionTraces.length && !animationTrace}>
-                  清除轨迹
-                </button>
-              </div>
             </section>
 
             <section className="panel-section standard-controls-section">
@@ -3866,7 +4610,7 @@ export default function App() {
             </section>
 
             <section className="panel-section standard-controls-section">
-              <h2>旋转中心</h2>
+              <h2>旋转</h2>
               <select value={centerKey} onChange={(event) => changeCenter(event.target.value)}>
                 {Object.entries(centers).map(([key, center]) => (
                   <option value={key} key={key}>
@@ -3877,32 +4621,49 @@ export default function App() {
               <div className="rotation-buttons">
                 <button type="button" onClick={() => rotateCard(-90, '逆时针旋转 90°')}>
                   <RotateCcw size={24} />
-                  逆时针 90°
+                  逆时针90°
                 </button>
                 <button type="button" onClick={() => rotateCard(90, '顺时针旋转 90°')}>
                   <RotateCw size={24} />
-                  顺时针 90°
+                  顺时针90°
                 </button>
                 <button type="button" onClick={() => rotateCard(180, '旋转 180°')}>
                   <RotateCw size={24} />
-                  旋转 180°
+                  旋转180°
+                </button>
+              </div>
+            </section>
+
+            <section className="panel-section standard-controls-section">
+              <h2>轨迹与重置</h2>
+              <div className="trace-actions">
+                <button type="button" className="danger-action" onClick={clearAllMotionTraces} disabled={!motionTraces.length && !animationTrace}>
+                  清除轨迹
                 </button>
               </div>
               <button className="wide-button" type="button" onClick={resetCurrentCard} disabled={!selectedCard}>
                 <RefreshCcw size={22} />
                 重置当前卡片
               </button>
+              <button className="reset-button" type="button" onClick={resetTeachingCards}>
+                <RefreshCcw size={24} />
+                重置全部卡片
+              </button>
             </section>
 
-            <button className="reset-button" type="button" onClick={resetTeachingCards}>
-              <RefreshCcw size={24} />
-              重置全部卡片
-            </button>
+            <section className="panel-section standard-controls-section">
+              <h2>返回</h2>
+              <button type="button" className="text-button" onClick={returnToTeachingEntry}>
+                返回入口选择
+              </button>
+            </section>
             </>
             )}
           </>
         )}
       </aside>
+      </div>
+      {mobileBottomControls}
     </main>
   );
 }
