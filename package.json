@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node tests/motionUtils.test.mjs",
+    "test": "node tests/motionUtils.test.mjs && node tests/presentationUtils.test.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },

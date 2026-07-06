@@ -113,6 +113,17 @@ h2 {
   text-align: right;
 }
 
+.step-banner {
+  padding: 16px 20px;
+  border: 3px solid #b9d7ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #102a43;
+  font-size: 30px;
+  font-weight: 950;
+  text-align: center;
+}
+
 .teaching-stage {
   width: 100%;
   flex: 1;
@@ -207,14 +218,6 @@ h2 {
   filter: drop-shadow(0 12px 16px rgba(29, 112, 162, 0.26));
 }
 
-.card-motion.effect-move {
-  animation: card-float 780ms ease-in-out;
-}
-
-.card-motion.effect-rotate {
-  filter: drop-shadow(0 0 16px rgba(245, 158, 11, 0.48));
-}
-
 .motion-trail {
   fill: rgba(29, 112, 162, 0.1);
   stroke: rgba(29, 112, 162, 0.48);
@@ -249,43 +252,6 @@ h2 {
   animation: endpoint-pulse 780ms ease-in-out infinite;
 }
 
-.animation-aura {
-  pointer-events: none;
-}
-
-.animation-aura.effect-move {
-  fill: rgba(29, 112, 162, 0.12);
-  stroke: rgba(29, 112, 162, 0.72);
-  stroke-width: 5;
-  animation: aura-pulse 780ms ease-in-out infinite;
-}
-
-.animation-aura.effect-rotate {
-  fill: rgba(245, 158, 11, 0.12);
-  stroke: rgba(245, 158, 11, 0.8);
-  stroke-width: 5;
-  animation: aura-pulse 520ms ease-in-out infinite;
-}
-
-.rotation-effect {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: spin-ring 780ms linear infinite;
-}
-
-.rotation-ring {
-  fill: none;
-  stroke: rgba(245, 158, 11, 0.9);
-  stroke-dasharray: 18 12;
-  stroke-width: 5;
-}
-
-.rotation-spark {
-  fill: #ffbe0b;
-  stroke: #ffffff;
-  stroke-width: 3;
-}
-
 .rotation-path-layer {
   pointer-events: none;
 }
@@ -312,6 +278,14 @@ h2 {
   animation: endpoint-pulse 780ms ease-in-out infinite;
 }
 
+.motion-arrow-blue {
+  fill: #1d70a2;
+}
+
+.motion-arrow-orange {
+  fill: #f59e0b;
+}
+
 .motion-start-frame {
   fill: rgba(107, 114, 128, 0.05);
   stroke: #6b7280;
@@ -324,44 +298,6 @@ h2 {
   stroke: #1d70a2;
   stroke-dasharray: 12 8;
   stroke-width: 4;
-}
-
-.motion-label {
-  fill: #0f3d5c;
-  paint-order: stroke;
-  stroke: #ffffff;
-  stroke-width: 7;
-  font-size: 20px;
-  font-weight: 900;
-  pointer-events: none;
-}
-
-.rotate-label {
-  fill: #9a5a00;
-}
-
-@keyframes card-float {
-  0%,
-  100% {
-    opacity: 0.9;
-  }
-
-  45% {
-    opacity: 1;
-  }
-}
-
-@keyframes aura-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-    stroke-width: 4;
-  }
-
-  50% {
-    opacity: 0.88;
-    stroke-width: 8;
-  }
 }
 
 @keyframes trail-fade {
@@ -397,16 +333,6 @@ h2 {
   }
 }
 
-@keyframes spin-ring {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .placeholder-tile {
   fill: #fef3c7;
 }
@@ -420,14 +346,6 @@ h2 {
 .card-frame.selected {
   stroke: #e63946;
   stroke-width: 7;
-}
-
-.card-frame.selected.aligned {
-  stroke: #159947;
-}
-
-.card-frame.selected.near-target {
-  stroke: #f59e0b;
 }
 
 .target-reference-frame {
@@ -444,23 +362,6 @@ h2 {
   stroke-width: 6;
   font-size: 22px;
   font-weight: 900;
-}
-
-.alignment-message {
-  paint-order: stroke;
-  stroke: #ffffff;
-  stroke-width: 8;
-  font-size: 28px;
-  font-weight: 900;
-  text-anchor: middle;
-}
-
-.alignment-message.aligned {
-  fill: #159947;
-}
-
-.alignment-message.near-target {
-  fill: #d97706;
 }
 
 .pivot-dot {
@@ -717,6 +618,182 @@ h2 {
   gap: 12px;
   padding-bottom: 14px;
   border-bottom: 2px solid #edf2f6;
+}
+
+.presentation-section {
+  gap: 14px;
+}
+
+.entry-choice-section {
+  gap: 14px;
+}
+
+.entry-choice-button {
+  min-height: 76px;
+  border-radius: 8px;
+  background: #1d70a2;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 950;
+}
+
+.entry-choice-button + .entry-choice-button {
+  background: #2a9d8f;
+}
+
+.step-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.step-editor label,
+.step-note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #40576d;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.step-editor input,
+.demo-step-list input {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 2px solid #b9c9d8;
+  border-radius: 8px;
+  color: #17202a;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.step-note-field {
+  grid-column: 1 / -1;
+}
+
+.step-editor .wide-button {
+  grid-column: 1 / -1;
+}
+
+.demo-step-list {
+  display: flex;
+  max-height: 320px;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+  list-style: none;
+}
+
+.demo-step-list li {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 2px solid #d7e4ee;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.demo-step-list li.active-step {
+  border-color: #1d70a2;
+  background: #edf7fc;
+}
+
+.step-main {
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  background: transparent;
+  color: #16324f;
+  text-align: left;
+}
+
+.step-main strong {
+  color: #1d70a2;
+  font-size: 15px;
+}
+
+.step-main span {
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.step-actions,
+.playback-controls,
+.storage-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.step-actions button,
+.playback-controls button,
+.storage-actions button,
+.import-config-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px;
+  border-radius: 7px;
+  background: #e7f2f8;
+  color: #144a70;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.playback-controls button {
+  background: #1d70a2;
+  color: #ffffff;
+}
+
+.storage-actions {
+  grid-template-columns: 1fr;
+}
+
+.import-config-button input {
+  display: none;
+}
+
+.storage-notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #40576d;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.classroom-mode {
+  grid-template-columns: minmax(760px, 1fr) 300px;
+  padding: 12px;
+}
+
+.classroom-mode .standard-controls-section,
+.classroom-mode .reset-button {
+  display: none;
+}
+
+.classroom-mode .control-panel {
+  max-height: calc(100vh - 24px);
+}
+
+.classroom-mode .stage-heading h1 {
+  font-size: 28px;
+}
+
+.classroom-mode .step-banner {
+  font-size: 38px;
+}
+
+.classroom-mode .teaching-stage,
+.classroom-mode .teach-workspace,
+.classroom-mode .teach-workspace .teaching-stage {
+  min-height: calc(100vh - 160px);
 }
 
 .upload-button,

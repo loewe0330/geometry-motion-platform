@@ -10,7 +10,6 @@ import {
   RotateCcw,
   RotateCw,
   ScanSearch,
-  Trash2,
 } from 'lucide-react';
 import {
   MOTION_DURATIONS,
@@ -19,6 +18,16 @@ import {
   defaultMotionSettings,
   easeInOut,
 } from './motionUtils.js';
+import {
+  CENTER_LABELS,
+  MOVE_DIRECTIONS,
+  ROTATE_DIRECTIONS,
+  createDefaultDemoStep,
+  describeDemoStep,
+  normalizeDemoConfig,
+  serializeDemoConfig,
+  stepToMotion,
+} from './presentationUtils.js';
 
 const DEFAULT_ROWS = 2;
 const DEFAULT_COLS = 5;
@@ -31,6 +40,7 @@ const ROLE_CARD = 'card';
 const ROLE_TARGET = 'target';
 const ROLE_IGNORE = 'ignore';
 const TARGET_OPACITY_DEFAULT = 35;
+const DEMO_STORAGE_KEY = 'geometry-motion-v2-demo';
 
 const wizardSteps = [
   { key: 'upload', label: '上传图片' },
@@ -1172,6 +1182,7 @@ function createSampleHomeworkPhoto() {
 export default function App() {
   const [photo, setPhoto] = useState(null);
   const [mode, setMode] = useState('recognize');
+  const [teachingMode, setTeachingMode] = useState('entry');
   const [rows, setRows] = useState(DEFAULT_ROWS);
   const [cols, setCols] = useState(DEFAULT_COLS);
   const [cards, setCards] = useState(() => makeCards(DEFAULT_ROWS, DEFAULT_COLS));
@@ -1184,6 +1195,13 @@ export default function App() {
   const [animationTrace, setAnimationTrace] = useState(null);
   const [motionTraces, setMotionTraces] = useState([]);
   const [motionSettings, setMotionSettings] = useState(defaultMotionSettings);
+  const [demoSteps, setDemoSteps] = useState([]);
+  const [stepDraft, setStepDraft] = useState(() => createDefaultDemoStep(1));
+  const [editingStepId, setEditingStepId] = useState(null);
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [playbackStatus, setPlaybackStatus] = useState('idle');
+  const [classroomMode, setClassroomMode] = useState(false);
+  const [storageNotice, setStorageNotice] = useState('');
   const [drag, setDrag] = useState(null);
   const [candidates, setCandidates] = useState([]);
   const [selectedRegionId, setSelectedRegionId] = useState(null);
@@ -1218,6 +1236,12 @@ export default function App() {
   const previewSvgRef = useRef(null);
   const animationTimerRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const cardsRef = useRef(cards);
+  const demoStepsRef = useRef(demoSteps);
+  const playbackStatusRef = useRef(playbackStatus);
+  const currentStepIndexRef = useRef(currentStepIndex);
+  const initialTeachingCardsRef = useRef(cards);
+  const animationResolverRef = useRef(null);
 
   const selectedSourceRegion = candidates.find((candidate) => candidate.id === sourceRegionId);
   const explicitTargetRegion = candidates.find((candidate) => candidate.id === targetRegionId);
@@ -1314,6 +1338,52 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
+
+  useEffect(() => {
+    demoStepsRef.current = demoSteps;
+  }, [demoSteps]);
+
+  useEffect(() => {
+    playbackStatusRef.current = playbackStatus;
+  }, [playbackStatus]);
+
+  useEffect(() => {
+    currentStepIndexRef.current = currentStepIndex;
+  }, [currentStepIndex]);
+
+  function setPlayback(nextStatus) {
+    playbackStatusRef.current = nextStatus;
+    setPlaybackStatus(nextStatus);
+  }
+
+  function enterTeachingMode(nextMode) {
+    setTeachingMode(nextMode);
+    setFocusSelectedOnly(true);
+    setShowTargetReference(true);
+    setMotionTraces([]);
+    setAnimationTrace(null);
+    setAnimatingId(null);
+    setAnimationEffect(null);
+    setActivity(nextMode === 'free' ? '已进入教学演示自由操作模式' : '已进入演示步骤播放模式');
+  }
+
+  function returnToTeachingEntry() {
+    window.cancelAnimationFrame(animationFrameRef.current);
+    if (animationResolverRef.current) {
+      animationResolverRef.current('return');
+      animationResolverRef.current = null;
+    }
+    setPlayback('idle');
+    setTeachingMode('entry');
+    setAnimationTrace(null);
+    setAnimatingId(null);
+    setAnimationEffect(null);
+    setActivity('已返回入口选择');
+  }
+
   function resetCards(nextRows = rows, nextCols = cols) {
     setCards(makeCards(nextRows, nextCols));
     setSelectedId(1);
@@ -1371,6 +1441,10 @@ export default function App() {
 
   function animateCard(cardId, fromValues, toValues, makeMessage, doneMessage, effect = 'move', traceOptions = {}) {
     window.cancelAnimationFrame(animationFrameRef.current);
+    if (animationResolverRef.current) {
+      animationResolverRef.current('cancelled');
+      animationResolverRef.current = null;
+    }
     const startedAt = performance.now();
     const duration = MOTION_DURATIONS[motionSettings.speed] ?? MOTION_DURATIONS.normal;
     const traceId = traceOptions.id ?? makeTraceId(effect, cardId);
@@ -1378,61 +1452,73 @@ export default function App() {
     setAnimationEffect(effect);
     setAnimationTrace({ id: traceId, cardId, kind: effect, effect, fromValues, toValues, progress: 0, ...traceOptions });
 
-    function frame(now) {
-      const progress = Math.min((now - startedAt) / duration, 1);
-      const eased = easeInOut(progress);
-      const nextValues = {};
+    return new Promise((resolve) => {
+      animationResolverRef.current = resolve;
 
-      Object.keys(toValues).forEach((key) => {
-        nextValues[key] = fromValues[key] + (toValues[key] - fromValues[key]) * eased;
-      });
-
-      setCards((currentCards) =>
-        currentCards.map((card) => (card.id === cardId ? { ...card, ...nextValues } : card)),
-      );
-      setAnimationTrace({
-        id: traceId,
-        cardId,
-        kind: effect,
-        effect,
-        fromValues,
-        toValues,
-        progress: eased,
-        ...traceOptions,
-      });
-      setActivity(makeMessage(progress, nextValues));
-
-      if (progress < 1) {
-        animationFrameRef.current = window.requestAnimationFrame(frame);
-        return;
+      function finish(result) {
+        if (animationResolverRef.current === resolve) {
+          animationResolverRef.current = null;
+        }
+        resolve(result);
       }
 
-      setCards((currentCards) =>
-        currentCards.map((card) => (card.id === cardId ? { ...card, ...toValues } : card)),
-      );
-      setAnimatingId(null);
-      setAnimationEffect(null);
-      setAnimationTrace(null);
-      setMotionTraces((items) => [
-        {
+      function frame(now) {
+        const progress = Math.min((now - startedAt) / duration, 1);
+        const eased = easeInOut(progress);
+        const nextValues = {};
+
+        Object.keys(toValues).forEach((key) => {
+          nextValues[key] = fromValues[key] + (toValues[key] - fromValues[key]) * eased;
+        });
+
+        setCards((currentCards) =>
+          currentCards.map((card) => (card.id === cardId ? { ...card, ...nextValues } : card)),
+        );
+        setAnimationTrace({
           id: traceId,
           cardId,
           kind: effect,
           effect,
           fromValues,
           toValues,
-          progress: 1,
+          progress: eased,
           ...traceOptions,
-        },
-        ...items,
-      ]);
-      if (traceOptions.historyText) {
-        setHistory((items) => [traceOptions.historyText, ...items]);
-      }
-      setActivity(doneMessage);
-    }
+        });
+        setActivity(makeMessage(progress, nextValues));
 
-    animationFrameRef.current = window.requestAnimationFrame(frame);
+        if (progress < 1) {
+          animationFrameRef.current = window.requestAnimationFrame(frame);
+          return;
+        }
+
+        setCards((currentCards) =>
+          currentCards.map((card) => (card.id === cardId ? { ...card, ...toValues } : card)),
+        );
+        setAnimatingId(null);
+        setAnimationEffect(null);
+        setAnimationTrace(null);
+        setMotionTraces((items) => [
+          {
+            id: traceId,
+            cardId,
+            kind: effect,
+            effect,
+            fromValues,
+            toValues,
+            progress: 1,
+            ...traceOptions,
+          },
+          ...items,
+        ]);
+        if (traceOptions.historyText) {
+          setHistory((items) => [traceOptions.historyText, ...items]);
+        }
+        setActivity(doneMessage);
+        finish('complete');
+      }
+
+      animationFrameRef.current = window.requestAnimationFrame(frame);
+    });
   }
 
   async function handleImageUpload(event) {
@@ -1847,6 +1933,7 @@ export default function App() {
       setTargetDraftRect(null);
       setExtractedGrid(null);
       setCards(nextCards);
+      initialTeachingCardsRef.current = nextCards;
       setSelectedId(nextCards[0].id);
       setCenterKey(nextCards[0].rotationCenter);
       setHistory([]);
@@ -1854,8 +1941,9 @@ export default function App() {
       setShowTargetReference(true);
       setTargetOpacity(TARGET_OPACITY_DEFAULT);
       setMode('teach');
+      setTeachingMode('entry');
       setWizardStep('teach');
-      setActivity(`已进入教学演示：${nextCards.length} 张移动卡片，目标参考图固定显示`);
+      setActivity(`已准备好 ${nextCards.length} 张移动卡片，请选择教学入口`);
       return;
     }
 
@@ -1874,13 +1962,15 @@ export default function App() {
       setManualTargetRect(nextTargetRect);
       setTargetDraftRect(null);
       setCards(nextCards);
+      initialTeachingCardsRef.current = nextCards;
       setSelectedId(nextCards[0].id);
       setCenterKey(nextCards[0].rotationCenter);
       setHistory([]);
       setFocusSelectedOnly(true);
       setShowTargetReference(true);
       setMode('teach');
-      setActivity(`已进入教学演示：${nextCards.length} 张手工卡片，目标参考图固定显示`);
+      setTeachingMode('entry');
+      setActivity(`已准备好 ${nextCards.length} 张手工卡片，请选择教学入口`);
       return;
     }
 
@@ -1911,14 +2001,16 @@ export default function App() {
     if (!sourceRegionId && fallbackWholeRegion) setSourceRegionId(fallbackWholeRegion.id);
     setCellRoles(nextRoles);
     setCards(nextCards);
+    initialTeachingCardsRef.current = nextCards;
     setSelectedId(nextCards[0].id);
     setCenterKey(nextCards[0].rotationCenter);
     setHistory([]);
     setFocusSelectedOnly(true);
     setShowTargetReference(true);
     setMode('teach');
+    setTeachingMode('entry');
     setActivity(
-      `已进入教学演示：${nextCards.length} 张可移动卡片，目标参考图固定显示`,
+      `已准备好 ${nextCards.length} 张可移动卡片，请选择教学入口`,
     );
   }
 
@@ -2164,6 +2256,7 @@ export default function App() {
     if (guidedGridRegion && cardCellIndices.length) {
       const nextCards = makeGridTeachingCards(guidedGridRegion, cardCellIndices);
       setCards(nextCards);
+      initialTeachingCardsRef.current = nextCards;
       setSelectedId(nextCards[0]?.id ?? 1);
       setCenterKey('center');
       setHistory([]);
@@ -2174,6 +2267,7 @@ export default function App() {
     if (hasManualBlocks) {
       const nextCards = makeManualTeachingCards(manualBlocks);
       setCards(nextCards);
+      initialTeachingCardsRef.current = nextCards;
       setSelectedId(nextCards[0]?.id ?? 1);
       setCenterKey('center');
       setHistory([]);
@@ -2188,6 +2282,7 @@ export default function App() {
         : makeDefaultCellRoles(selectedWholeRegion.rows, selectedWholeRegion.cols);
     const nextCards = makeTeachingCards(selectedWholeRegion.rows, selectedWholeRegion.cols, nextRoles);
     setCards(nextCards);
+    initialTeachingCardsRef.current = nextCards;
     setSelectedId(nextCards[0]?.id ?? 1);
     setCenterKey('center');
     setHistory([]);
@@ -2452,31 +2547,322 @@ export default function App() {
     setActivity(`旋转中心：${centers[nextCenterKey].label}`);
   }
 
-  function replayCurrentMoveTrace() {
-    if (!selectedCard) return;
-    const trace = motionTraces.find(
-      (item) => item.cardId === selectedId && item.kind === 'move' && item.fromValues && item.toValues,
+  function updateStepDraft(updates) {
+    setStepDraft((draft) => {
+      const next = { ...draft, ...updates };
+      return { ...next, note: updates.note ?? describeDemoStep({ ...next, note: '' }) };
+    });
+  }
+
+  function addDemoStep() {
+    if (editingStepId) {
+      updateDemoStep(editingStepId, stepDraft);
+      setEditingStepId(null);
+      setStepDraft(createDefaultDemoStep(selectedId));
+      setActivity('演示步骤已修改');
+      return;
+    }
+    const nextStep = {
+      ...stepDraft,
+      id: `step-${Date.now()}-${Math.round(Math.random() * 10000)}`,
+      note: stepDraft.note?.trim() || describeDemoStep(stepDraft),
+    };
+    setDemoSteps((steps) => [...steps, nextStep]);
+    setCurrentStepIndex(demoSteps.length);
+    setActivity(`已添加演示步骤：${describeDemoStep(nextStep)}`);
+  }
+
+  function editDemoStep(step) {
+    setEditingStepId(step.id);
+    setStepDraft(step);
+    setActivity(`正在修改：${describeDemoStep(step)}`);
+  }
+
+  function updateDemoStep(stepId, updates) {
+    setDemoSteps((steps) =>
+      steps.map((step) => {
+        if (step.id !== stepId) return step;
+        const next = { ...step, ...updates };
+        return { ...next, note: updates.note ?? describeDemoStep({ ...next, note: '' }) };
+      }),
     );
-    if (!trace) return;
-    setCards((currentCards) =>
-      currentCards.map((card) =>
-        card.id === selectedId ? { ...card, ...trace.fromValues } : card,
-      ),
-    );
-    animateCard(
-      selectedId,
-      trace.fromValues,
-      trace.toValues,
-      (progress) => `卡片 ${selectedId} 正在演示移动：${Math.round(progress * 100)}%`,
-      `卡片 ${selectedId} 演示移动完成`,
-      'move',
+  }
+
+  function deleteDemoStep(stepId) {
+    setDemoSteps((steps) => steps.filter((step) => step.id !== stepId));
+    setCurrentStepIndex((index) => Math.max(0, Math.min(index, demoSteps.length - 2)));
+    setActivity('演示步骤已删除');
+  }
+
+  function moveDemoStep(stepId, direction) {
+    setDemoSteps((steps) => {
+      const index = steps.findIndex((step) => step.id === stepId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= steps.length) return steps;
+      const next = [...steps];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+  }
+
+  function clearDemoSteps() {
+    setDemoSteps([]);
+    setCurrentStepIndex(0);
+    setActivity('演示步骤已清空');
+  }
+
+  function getCardStepSize(card) {
+    const frame = getCardDisplayFrame(card);
+    return {
+      cellWidth: frame?.width ?? cellWidth,
+      cellHeight: frame?.height ?? cellHeight,
+    };
+  }
+
+  async function playDemoStep(index, options = {}) {
+    const step = demoStepsRef.current[index];
+    if (!step) return 'missing';
+    const card = cardsRef.current.find((item) => item.id === Number(step.cardId));
+    if (!card) {
+      setActivity(`找不到卡片 ${step.cardId}`);
+      return 'missing-card';
+    }
+    setCurrentStepIndex(index);
+    currentStepIndexRef.current = index;
+    setSelectedId(card.id);
+    setFocusSelectedOnly(true);
+    setShowTargetReference(true);
+
+    const motion = stepToMotion(step, getCardStepSize(card));
+    const description = step.note?.trim() || describeDemoStep(step);
+    let fromValues;
+    let toValues;
+    let effect;
+    let fromFrame;
+    let toFrame;
+    let pivot;
+
+    if (motion.kind === 'rotate') {
+      const rotationCenter = motion.values.rotationCenter ?? 'center';
+      fromValues = { rotation: card.rotation };
+      toValues = { rotation: card.rotation + motion.values.rotation };
+      setCards((currentCards) =>
+        currentCards.map((item) =>
+          item.id === card.id ? { ...item, rotationCenter } : item,
+        ),
+      );
+      fromFrame = getCardDisplayFrame({ ...card, rotationCenter }, { rotation: fromValues.rotation, rotationCenter });
+      toFrame = getCardDisplayFrame({ ...card, rotationCenter }, { rotation: toValues.rotation, rotationCenter });
+      pivot = fromFrame?.pivot;
+      effect = 'rotate';
+    } else {
+      fromValues = { tx: card.tx, ty: card.ty };
+      toValues = {
+        tx: card.tx + motion.values.tx,
+        ty: card.ty + motion.values.ty,
+      };
+      fromFrame = getCardDisplayFrame(card, fromValues);
+      toFrame = getCardDisplayFrame(card, toValues);
+      effect = 'move';
+    }
+
+    const result = await animateCard(
+      card.id,
+      fromValues,
+      toValues,
+      (progress, values) =>
+        effect === 'rotate'
+          ? `第 ${index + 1} 步：${description} 当前旋转 ${Math.round(Math.abs(values.rotation - fromValues.rotation))}°`
+          : `第 ${index + 1} 步：${description} ${Math.round(progress * 100)}%`,
+      `第 ${index + 1} 步完成：${description}`,
+      effect,
       {
-        label: trace.label ?? '演示移动',
-        fromFrame: trace.fromFrame,
-        toFrame: trace.toFrame,
-        historyText: `卡片 ${selectedId}：演示移动`,
+        label: description.replace(/^卡片\d+：/, ''),
+        fromFrame,
+        toFrame,
+        pivot,
+        historyText: `第 ${index + 1} 步：${description}`,
       },
     );
+    return result;
+  }
+
+  async function playAllDemoSteps(startIndex = currentStepIndexRef.current) {
+    if (!demoStepsRef.current.length) {
+      setActivity('请先添加演示步骤');
+      return;
+    }
+    setPlayback('playing');
+    setMotionTraces([]);
+    for (let index = startIndex; index < demoStepsRef.current.length; index += 1) {
+      if (playbackStatusRef.current !== 'playing') break;
+      const result = await playDemoStep(index);
+      if (result !== 'complete' || playbackStatusRef.current !== 'playing') break;
+      setCurrentStepIndex(Math.min(index + 1, demoStepsRef.current.length - 1));
+    }
+    if (playbackStatusRef.current === 'playing') {
+      setPlayback('idle');
+      setActivity('全部演示步骤播放完成');
+    }
+  }
+
+  async function playSingleDemoStep() {
+    if (!demoStepsRef.current.length) {
+      setActivity('请先添加演示步骤');
+      return;
+    }
+    setPlayback('stepping');
+    const result = await playDemoStep(currentStepIndexRef.current);
+    if (playbackStatusRef.current !== 'paused') {
+      setPlayback('idle');
+    }
+    if (result === 'complete') {
+      setCurrentStepIndex((index) => Math.min(index + 1, demoStepsRef.current.length - 1));
+    }
+  }
+
+  function pausePlayback() {
+    if (playbackStatusRef.current !== 'playing' && playbackStatusRef.current !== 'stepping') return;
+    window.cancelAnimationFrame(animationFrameRef.current);
+    setAnimatingId(null);
+    setAnimationEffect(null);
+    if (animationResolverRef.current) {
+      animationResolverRef.current('paused');
+      animationResolverRef.current = null;
+    }
+    setPlayback('paused');
+    setActivity('演示已暂停');
+  }
+
+  function continuePlayback() {
+    playAllDemoSteps(currentStepIndexRef.current);
+  }
+
+  function previousDemoStep() {
+    const nextIndex = Math.max(0, currentStepIndexRef.current - 1);
+    const nextCards = computeCardsBeforeStep(nextIndex);
+    setCards(nextCards);
+    setCurrentStepIndex(nextIndex);
+    setPlayback('idle');
+    setMotionTraces([]);
+    setAnimationTrace(null);
+    setAnimatingId(null);
+    setAnimationEffect(null);
+    setSelectedId(nextCards[0]?.id ?? 1);
+    setActivity(`已回到第 ${nextIndex + 1} 步播放前状态`);
+  }
+
+  function resetDemoToStart(clearActivity = true) {
+    window.cancelAnimationFrame(animationFrameRef.current);
+    if (animationResolverRef.current) {
+      animationResolverRef.current('reset');
+      animationResolverRef.current = null;
+    }
+    setCards(initialTeachingCardsRef.current.map((card) => ({ ...card })));
+    setSelectedId(initialTeachingCardsRef.current[0]?.id ?? 1);
+    setCurrentStepIndex(0);
+    setPlayback('idle');
+    setMotionTraces([]);
+    setAnimationTrace(null);
+    setAnimatingId(null);
+    setAnimationEffect(null);
+    if (clearActivity) setActivity('演示已重置到播放前状态');
+  }
+
+  function computeCardsBeforeStep(stepIndex) {
+    let nextCards = initialTeachingCardsRef.current.map((card) => ({ ...card }));
+    demoStepsRef.current.slice(0, stepIndex).forEach((step) => {
+      const cardIndex = nextCards.findIndex((card) => card.id === Number(step.cardId));
+      if (cardIndex < 0) return;
+      const card = nextCards[cardIndex];
+      const frameWidth = card.sourceRect ? card.sourceRect.width * sourceScale : cellWidth;
+      const frameHeight = card.sourceRect ? card.sourceRect.height * sourceScale : cellHeight;
+      const motion = stepToMotion(step, { cellWidth: frameWidth, cellHeight: frameHeight });
+      if (motion.kind === 'rotate') {
+        nextCards[cardIndex] = {
+          ...card,
+          rotation: card.rotation + motion.values.rotation,
+          rotationCenter: motion.values.rotationCenter,
+        };
+        return;
+      }
+      nextCards[cardIndex] = {
+        ...card,
+        tx: card.tx + motion.values.tx,
+        ty: card.ty + motion.values.ty,
+      };
+    });
+    return nextCards;
+  }
+
+  function buildDemoConfig() {
+    return serializeDemoConfig({
+      rows,
+      cols,
+      targetCellIndices,
+      cardCellIndices,
+      gridBox,
+      manualBlocks,
+      cellRoles,
+      targetOpacity,
+      motionSettings,
+      demoSteps,
+    });
+  }
+
+  function applyDemoConfig(config) {
+    const normalized = normalizeDemoConfig(config);
+    setRows(normalized.rows);
+    setCols(normalized.cols);
+    setTargetCellIndices(normalized.targetCellIndices);
+    setCardCellIndices(normalized.cardCellIndices);
+    if (normalized.gridBox) setGridBox(normalized.gridBox);
+    setManualBlocks(normalized.manualBlocks);
+    if (normalized.cellRoles.length) setCellRoles(normalized.cellRoles);
+    setTargetOpacity(normalized.targetOpacity);
+    setMotionSettings((settings) => ({ ...settings, ...normalized.motionSettings }));
+    setDemoSteps(normalized.demoSteps);
+    setCurrentStepIndex(0);
+    setStorageNotice('已读取演示配置，请确认已上传同一张图片');
+    setActivity('已读取演示配置，请重新上传或确认同一张图片');
+  }
+
+  function saveCurrentDemo() {
+    window.localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(buildDemoConfig()));
+    setStorageNotice('当前演示已保存到浏览器本地');
+  }
+
+  function loadSavedDemo() {
+    const raw = window.localStorage.getItem(DEMO_STORAGE_KEY);
+    if (!raw) {
+      setStorageNotice('没有找到本地保存的演示');
+      return;
+    }
+    applyDemoConfig(JSON.parse(raw));
+  }
+
+  function clearSavedDemo() {
+    window.localStorage.removeItem(DEMO_STORAGE_KEY);
+    setStorageNotice('本地保存已清除');
+  }
+
+  function exportDemoConfig() {
+    const blob = new Blob([JSON.stringify(buildDemoConfig(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'geometry-motion-demo-v2.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    setStorageNotice('已导出演示配置 JSON');
+  }
+
+  async function importDemoConfig(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    applyDemoConfig(JSON.parse(text));
+    event.target.value = '';
   }
 
   const photoScale = photo ? recognitionLayout.width / photo.naturalWidth : 1;
@@ -2507,46 +2893,15 @@ export default function App() {
         }
       : null;
 
-  function getCardAlignment(card) {
-    if (!teachingRegion) return { className: 'off-target', message: '' };
-    const cardIndex = Math.max(0, cards.findIndex((item) => item.id === card.id));
-    const cardSourceRect =
-      card.sourceRect ?? {
-        x: teachingRegion.x + card.col * (teachingRegion.width / activeCols),
-        y: teachingRegion.y + card.row * (teachingRegion.height / activeRows),
-        width: teachingRegion.width / activeCols,
-        height: teachingRegion.height / activeRows,
-      };
-    const targetCell =
-      targetCells[cardIndex % targetCells.length] ??
-      activeTargetRect;
-    if (!targetCell) return { className: 'off-target', message: '' };
-    const currentX = teachingLayout.x + (cardSourceRect.x - teachingRegion.x) * sourceScale + card.tx;
-    const currentY = teachingLayout.y + (cardSourceRect.y - teachingRegion.y) * sourceScale + card.ty;
-    const targetX = teachingLayout.x + (targetCell.x - teachingRegion.x) * sourceScale;
-    const targetY = teachingLayout.y + (targetCell.y - teachingRegion.y) * sourceScale;
-    const distance = Math.hypot(currentX - targetX, currentY - targetY);
-    const angle = normalizeAngle(card.rotation);
-    const angleDistance = Math.min(angle, 360 - angle);
-    if (distance <= 16 && angleDistance <= 8) {
-      return { className: 'aligned', message: '已基本重合' };
-    }
-    if (distance <= 55) {
-      return { className: 'near-target', message: '接近目标位置' };
-    }
-    return { className: 'off-target', message: '' };
-  }
-
-  const selectedAlignment = selectedCard ? getCardAlignment(selectedCard) : { message: '' };
   const activeWizardStep = mode === 'teach' ? 'teach' : wizardStep;
   const selectionPreviewIndices = cellSelectionDrag?.currentIndices ?? [];
-  const canReplayCurrentMove = motionTraces.some(
-    (trace) => trace.cardId === selectedId && trace.kind === 'move' && trace.fromValues && trace.toValues,
-  );
+  const playbackActive = ['playing', 'paused', 'stepping'].includes(playbackStatus);
+  const activeDemoStep = demoSteps[currentStepIndex] ?? null;
+  const activeStepText = teachingMode === 'steps' && activeDemoStep ? `第 ${currentStepIndex + 1} 步：${describeDemoStep(activeDemoStep)}` : '';
 
   const cardNodes = teachingRegion
     ? cards
-        .filter((card) => !focusSelectedOnly || card.id === selectedId)
+        .filter((card) => (playbackActive || focusSelectedOnly ? card.id === selectedId : true))
         .map((card) => {
     const sourceRect =
       card.sourceRect ?? {
@@ -2566,7 +2921,6 @@ export default function App() {
     const isAnimating = card.id === animatingId;
     const imageX = demoPhoto && teachingRegion ? -sourceRect.x * sourceScale : 0;
     const imageY = demoPhoto && teachingRegion ? -sourceRect.y * sourceScale : 0;
-    const alignment = getCardAlignment(card);
     const traceRecords = [
       ...motionTraces.filter((trace) => trace.cardId === card.id),
       ...(animationTrace?.cardId === card.id ? [animationTrace] : []),
@@ -2592,7 +2946,8 @@ export default function App() {
               label: trace.label,
               progress: trace.progress,
             }),
-      );
+      )
+      .map((shape) => shape);
 
     function renderFrame(rect, className) {
       return (
@@ -2630,12 +2985,10 @@ export default function App() {
                   x2={shape.path.x2}
                   y2={shape.path.y2}
                   className="motion-path-line"
+                  markerEnd="url(#motion-arrow-blue)"
                 />
                 <circle cx={shape.path.x1} cy={shape.path.y1} r="7" className="motion-path-start" />
                 <circle cx={shape.path.fullX2} cy={shape.path.fullY2} r="8" className="motion-path-end" />
-                <text x={shape.path.x2 + 12} y={shape.path.y2 - 12} className="motion-label">
-                  {shape.label}
-                </text>
               </>
             )}
             {motionSettings.showPath && shape.kind === 'rotate' && (
@@ -2643,12 +2996,10 @@ export default function App() {
                 <path
                   d={shape.arcPath}
                   className="rotation-path-arc"
+                  markerEnd="url(#motion-arrow-orange)"
                 />
                 <circle cx={shape.center.x} cy={shape.center.y} r="8" className="rotation-path-center" />
                 <circle cx={shape.arcEnd.x} cy={shape.arcEnd.y} r="8" className="rotation-path-end" />
-                <text x={shape.center.x + 14} y={shape.center.y - shape.radius - 12} className="motion-label rotate-label">
-                  当前旋转：{Math.round(Math.abs(shape.current.rotation - shape.from.rotation))}°
-                </text>
               </>
             )}
           </g>
@@ -2658,23 +3009,11 @@ export default function App() {
             'card-motion',
             selected ? 'selected-card-motion' : '',
             isAnimating ? 'is-animating' : '',
-            isAnimating && animationEffect ? `effect-${animationEffect}` : '',
-            alignment.className,
           ].join(' ')}
           transform={`translate(${originalX + card.tx} ${originalY + card.ty}) rotate(${card.rotation} ${pivotX} ${pivotY})`}
           onPointerDown={(event) => startDrag(event, card)}
           onClick={() => selectCard(card.id)}
         >
-          {isAnimating && (
-            <rect
-              x="-8"
-              y="-8"
-              width={displayWidth + 16}
-              height={displayHeight + 16}
-              rx="10"
-              className={`animation-aura effect-${animationEffect}`}
-            />
-          )}
           {demoPhoto?.url ? (
             <image
               href={demoPhoto.url}
@@ -2693,20 +3032,8 @@ export default function App() {
             y="0"
             width={displayWidth}
             height={displayHeight}
-            className={selected ? `card-frame selected ${alignment.className}` : 'card-frame'}
+            className={selected ? 'card-frame selected' : 'card-frame'}
           />
-          {isAnimating && animationEffect === 'rotate' && (
-            <g className="rotation-effect" pointerEvents="none">
-              <ellipse
-                cx={pivotX}
-                cy={pivotY}
-                rx={displayWidth / 2 + 16}
-                ry={displayHeight / 2 + 16}
-                className="rotation-ring"
-              />
-              <circle cx={pivotX + displayWidth / 2 + 16} cy={pivotY} r="8" className="rotation-spark" />
-            </g>
-          )}
           <circle cx={pivotX} cy={pivotY} r={selected ? 9 : 6} className="pivot-dot" />
         </g>
       </g>
@@ -2715,15 +3042,20 @@ export default function App() {
     : [];
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${classroomMode ? 'classroom-mode' : ''}`}>
       <section className="stage-panel" aria-label="图形运动演示画布">
         <div className="stage-heading">
           <div>
             <p className="eyebrow">小学数学课堂演示</p>
-            <h1>图形运动教学工具 V1.5</h1>
+            <h1>图形运动教学工具 V2</h1>
           </div>
           <div className="status-pill">{activity}</div>
         </div>
+        {mode === 'teach' && activeStepText && (
+          <div className="step-banner">
+            {activeStepText}
+          </div>
+        )}
 
         {mode === 'recognize' ? (
           <svg
@@ -3086,6 +3418,12 @@ export default function App() {
                 <pattern id="paper-grid-teach" width="32" height="32" patternUnits="userSpaceOnUse">
                   <path d="M 32 0 L 0 0 0 32" className="paper-grid-line" />
                 </pattern>
+                <marker id="motion-arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+                  <path d="M 1 1 L 11 6 L 1 11 Z" className="motion-arrow-blue" />
+                </marker>
+                <marker id="motion-arrow-orange" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+                  <path d="M 1 1 L 11 6 L 1 11 Z" className="motion-arrow-orange" />
+                </marker>
               </defs>
               <rect width={STAGE_WIDTH} height={STAGE_HEIGHT} className="stage-bg" />
               <rect width={STAGE_WIDTH} height={STAGE_HEIGHT} fill="url(#paper-grid-teach)" />
@@ -3147,11 +3485,6 @@ export default function App() {
                   />
                 ))}
               </g>
-              )}
-              {selectedAlignment.message && (
-                <text x="490" y="48" className={`alignment-message ${selectedAlignment.className}`}>
-                  {selectedAlignment.message}
-                </text>
               )}
             </svg>
           </div>
@@ -3277,8 +3610,185 @@ export default function App() {
 
         {mode === 'teach' && (
           <>
-            <section className="panel-section">
-              <h2>当前选中卡片</h2>
+            {teachingMode === 'entry' && (
+              <section className="panel-section entry-choice-section">
+                <h2>选择课堂入口</h2>
+                <button type="button" className="entry-choice-button" onClick={() => enterTeachingMode('free')}>
+                  进入教学演示
+                </button>
+                <button type="button" className="entry-choice-button" onClick={() => enterTeachingMode('steps')}>
+                  进入演示步骤
+                </button>
+              </section>
+            )}
+
+            {teachingMode === 'steps' && (
+            <section className="panel-section presentation-section">
+              <div className="record-heading">
+                <h2>演示步骤</h2>
+                <button type="button" className="text-button" onClick={returnToTeachingEntry}>
+                  返回入口选择
+                </button>
+              </div>
+              <div className="step-editor">
+                <label>
+                  选择卡片
+                  <select value={stepDraft.cardId} onChange={(event) => updateStepDraft({ cardId: Number(event.target.value) })}>
+                    {cards.map((card) => (
+                      <option key={card.id} value={card.id}>
+                        卡片{card.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  选择动作
+                  <select value={stepDraft.action} onChange={(event) => updateStepDraft({ action: event.target.value })}>
+                    <option value="move">平移</option>
+                    <option value="rotate">旋转</option>
+                  </select>
+                </label>
+                {stepDraft.action === 'move' ? (
+                  <>
+                    <label>
+                      方向
+                      <select value={stepDraft.moveDirection} onChange={(event) => updateStepDraft({ moveDirection: event.target.value })}>
+                        {Object.entries(MOVE_DIRECTIONS).map(([key, meta]) => (
+                          <option key={key} value={key}>
+                            {meta.label.replace('向', '')}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      移动距离
+                      <select
+                        value={stepDraft.moveDistanceMode === 'custom' ? 'custom' : stepDraft.moveDistance}
+                        onChange={(event) =>
+                          event.target.value === 'custom'
+                            ? updateStepDraft({ moveDistanceMode: 'custom' })
+                            : updateStepDraft({ moveDistanceMode: 'grid', moveDistance: Number(event.target.value) })
+                        }
+                      >
+                        <option value="0.5">0.5格</option>
+                        <option value="1">1格</option>
+                        <option value="2">2格</option>
+                        <option value="3">3格</option>
+                        <option value="custom">自定义像素</option>
+                      </select>
+                    </label>
+                    {stepDraft.moveDistanceMode === 'custom' && (
+                      <label>
+                        像素
+                        <input
+                          type="number"
+                          min="1"
+                          value={stepDraft.customPixels}
+                          onChange={(event) => updateStepDraft({ customPixels: Number(event.target.value) })}
+                        />
+                      </label>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      旋转方向
+                      <select value={stepDraft.rotateDirection} onChange={(event) => updateStepDraft({ rotateDirection: event.target.value })}>
+                        {Object.entries(ROTATE_DIRECTIONS).map(([key, meta]) => (
+                          <option key={key} value={key}>
+                            {meta.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      旋转角度
+                      <select value={stepDraft.rotateAngle} onChange={(event) => updateStepDraft({ rotateAngle: Number(event.target.value) })}>
+                        <option value="90">90°</option>
+                        <option value="180">180°</option>
+                        <option value="270">270°</option>
+                      </select>
+                    </label>
+                    <label>
+                      旋转中心
+                      <select value={stepDraft.rotationCenter} onChange={(event) => updateStepDraft({ rotationCenter: event.target.value })}>
+                        {Object.entries(CENTER_LABELS).map(([key, label]) => (
+                          <option key={key} value={key}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
+                )}
+                <label className="step-note-field">
+                  步骤说明
+                  <input
+                    value={stepDraft.note}
+                    onChange={(event) => updateStepDraft({ note: event.target.value })}
+                  />
+                </label>
+                <button type="button" className="wide-button" onClick={addDemoStep}>
+                  {editingStepId ? '保存修改' : '添加步骤'}
+                </button>
+                {editingStepId && (
+                  <button type="button" className="text-button" onClick={() => {
+                    setEditingStepId(null);
+                    setStepDraft(createDefaultDemoStep(selectedId));
+                  }}>
+                    取消修改
+                  </button>
+                )}
+              </div>
+              <ol className="demo-step-list">
+                {demoSteps.length === 0 ? (
+                  <li className="empty-history">还没有演示步骤</li>
+                ) : (
+                  demoSteps.map((step, index) => (
+                    <li key={step.id} className={index === currentStepIndex ? 'active-step' : ''}>
+                      <button type="button" className="step-main" onClick={() => setCurrentStepIndex(index)}>
+                        <strong>第{index + 1}步</strong>
+                        <span>{describeDemoStep(step)}</span>
+                      </button>
+                      <div className="step-actions">
+                        <button type="button" onClick={() => moveDemoStep(step.id, -1)} disabled={index === 0}>上移步骤</button>
+                        <button type="button" onClick={() => moveDemoStep(step.id, 1)} disabled={index === demoSteps.length - 1}>下移步骤</button>
+                        <button type="button" onClick={() => editDemoStep(step)}>修改步骤</button>
+                        <button type="button" onClick={() => deleteDemoStep(step.id)}>删除步骤</button>
+                      </div>
+                      <input
+                        value={step.note}
+                        onChange={(event) => updateDemoStep(step.id, { note: event.target.value })}
+                        aria-label={`修改第${index + 1}步说明`}
+                      />
+                    </li>
+                  ))
+                )}
+              </ol>
+              <div className="playback-controls">
+                <button type="button" onClick={() => playAllDemoSteps(0)} disabled={!demoSteps.length || playbackStatus === 'playing'}>播放全部</button>
+                <button type="button" onClick={playSingleDemoStep} disabled={!demoSteps.length || playbackStatus === 'playing'}>播放当前步骤</button>
+                <button type="button" onClick={pausePlayback} disabled={playbackStatus !== 'playing' && playbackStatus !== 'stepping'}>暂停</button>
+                <button type="button" onClick={continuePlayback} disabled={playbackStatus !== 'paused'}>继续</button>
+                <button type="button" onClick={previousDemoStep} disabled={!demoSteps.length}>上一步</button>
+                <button type="button" onClick={playSingleDemoStep} disabled={!demoSteps.length || playbackStatus === 'playing'}>下一步</button>
+                <button type="button" onClick={() => resetDemoToStart(true)}>重置步骤演示</button>
+              </div>
+              <button type="button" className="text-button" onClick={clearDemoSteps} disabled={!demoSteps.length}>
+                清空步骤
+              </button>
+            </section>
+            )}
+
+            {teachingMode === 'free' && (
+            <>
+            <section className="panel-section standard-controls-section">
+              <div className="record-heading">
+                <h2>当前选中卡片</h2>
+                <button type="button" className="text-button" onClick={returnToTeachingEntry}>
+                  返回入口选择
+                </button>
+              </div>
               <div className="selected-card-display">卡片 {selectedCard?.id ?? '-'}</div>
               <div className="card-nav-buttons">
                 <button type="button" onClick={() => selectAdjacentCard(-1)} disabled={cards.length < 2}>
@@ -3308,6 +3818,14 @@ export default function App() {
                 />
                 只显示当前卡片
               </label>
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={showTargetReference}
+                  onChange={(event) => setShowTargetReference(event.target.checked)}
+                />
+                显示目标参考图
+              </label>
               <label className="range-control">
                 目标参考图透明度：{targetOpacity}%
                 <input
@@ -3319,53 +3837,14 @@ export default function App() {
                   onChange={(event) => setTargetOpacity(Number(event.target.value))}
                 />
               </label>
-            </section>
-
-            <section className="panel-section">
-              <h2>动画效果</h2>
-              <div className="segmented-control">
-                {[
-                  ['slow', '慢速'],
-                  ['normal', '正常'],
-                  ['fast', '快速'],
-                ].map(([speed, label]) => (
-                  <button
-                    type="button"
-                    key={speed}
-                    className={motionSettings.speed === speed ? 'active' : ''}
-                    onClick={() => setMotionSettings((settings) => ({ ...settings, speed }))}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <label className="toggle-row">
-                <input
-                  type="checkbox"
-                  checked={motionSettings.showPath}
-                  onChange={(event) => setMotionSettings((settings) => ({ ...settings, showPath: event.target.checked }))}
-                />
-                显示运动轨迹
-              </label>
-              <label className="toggle-row">
-                <input
-                  type="checkbox"
-                  checked={motionSettings.showFrames}
-                  onChange={(event) => setMotionSettings((settings) => ({ ...settings, showFrames: event.target.checked }))}
-                />
-                显示起点终点框
-              </label>
               <div className="trace-actions">
-                <button type="button" onClick={clearCurrentMotionTraces} disabled={!selectedCard}>
-                  清除当前轨迹
-                </button>
                 <button type="button" onClick={clearAllMotionTraces} disabled={!motionTraces.length && !animationTrace}>
-                  清除全部轨迹
+                  清除轨迹
                 </button>
               </div>
             </section>
 
-            <section className="panel-section">
+            <section className="panel-section standard-controls-section">
               <h2>平移</h2>
               <div className="move-pad">
                 <button type="button" className="move-up" onClick={() => moveCard('up')} title="上移一格">
@@ -3384,12 +3863,9 @@ export default function App() {
                   <ArrowDown size={28} />
                 </button>
               </div>
-              <button type="button" className="wide-button" onClick={replayCurrentMoveTrace} disabled={!canReplayCurrentMove}>
-                演示移动
-              </button>
             </section>
 
-            <section className="panel-section">
+            <section className="panel-section standard-controls-section">
               <h2>旋转中心</h2>
               <select value={centerKey} onChange={(event) => changeCenter(event.target.value)}>
                 {Object.entries(centers).map(([key, center]) => (
@@ -3412,36 +3888,18 @@ export default function App() {
                   旋转 180°
                 </button>
               </div>
-              <p className="angle-readout">
-                当前角度：{selectedCard ? normalizeAngle(selectedCard.rotation) : 0}°
-              </p>
               <button className="wide-button" type="button" onClick={resetCurrentCard} disabled={!selectedCard}>
                 <RefreshCcw size={22} />
                 重置当前卡片
               </button>
             </section>
 
-            <section className="panel-section record-section">
-              <div className="record-heading">
-                <h2>操作记录</h2>
-                <button type="button" className="text-button" onClick={() => setHistory([])}>
-                  <Trash2 size={20} />
-                  清空记录
-                </button>
-              </div>
-              <ol className="history-list">
-                {history.length === 0 ? (
-                  <li className="empty-history">还没有操作记录</li>
-                ) : (
-                  history.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)
-                )}
-              </ol>
-            </section>
-
             <button className="reset-button" type="button" onClick={resetTeachingCards}>
               <RefreshCcw size={24} />
               重置全部卡片
             </button>
+            </>
+            )}
           </>
         )}
       </aside>
