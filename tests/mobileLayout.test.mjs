@@ -45,3 +45,8 @@ assert.match(
   /\.mobile-grid-drawer\s+\.mobile-template-row,\s*\.mobile-grid-drawer\s+\.mobile-stepper-row\s*{[^}]*grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/s,
   'mobile grid drawer controls should fit all five buttons without horizontal clipping',
 );
+assert.match(
+  app,
+  /preserveAspectRatio=\{isCompactViewport\s*\?\s*'xMidYMid slice'\s*:\s*'xMidYMid meet'\}/,
+  'mobile teaching canvas should zoom into the work area instead of leaving large grid margins',
+);

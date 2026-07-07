@@ -1619,6 +1619,9 @@ export default function App() {
   const [mobileTeachingTab, setMobileTeachingTab] = useState('cards');
   const [mobileStepsTab, setMobileStepsTab] = useState('play');
   const [mobileMoveDistance, setMobileMoveDistance] = useState(1);
+  const [isCompactViewport, setIsCompactViewport] = useState(() =>
+    typeof window === 'undefined' ? false : window.matchMedia('(max-width: 899px)').matches,
+  );
   const [rows, setRows] = useState(DEFAULT_ROWS);
   const [cols, setCols] = useState(DEFAULT_COLS);
   const [cards, setCards] = useState(() => makeCards(DEFAULT_ROWS, DEFAULT_COLS));
@@ -1678,6 +1681,14 @@ export default function App() {
   const currentStepIndexRef = useRef(currentStepIndex);
   const initialTeachingCardsRef = useRef(cards);
   const animationResolverRef = useRef(null);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 899px)');
+    const updateViewportMode = () => setIsCompactViewport(mediaQuery.matches);
+    updateViewportMode();
+    mediaQuery.addEventListener('change', updateViewportMode);
+    return () => mediaQuery.removeEventListener('change', updateViewportMode);
+  }, []);
 
   const selectedSourceRegion = candidates.find((candidate) => candidate.id === sourceRegionId);
   const explicitTargetRegion = candidates.find((candidate) => candidate.id === targetRegionId);
@@ -4136,6 +4147,7 @@ export default function App() {
               ref={svgRef}
               className="teaching-stage"
               viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`}
+              preserveAspectRatio={isCompactViewport ? 'xMidYMid slice' : 'xMidYMid meet'}
               role="img"
               aria-label="图片卡片平移和旋转演示区域"
               onPointerMove={continueDrag}
