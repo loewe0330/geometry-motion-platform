@@ -35,12 +35,17 @@ const STAGE_WIDTH = 980;
 const STAGE_HEIGHT = 680;
 const FIT_PADDING = 34;
 const REGION_MIN_SIZE = 42;
-const TEACH_SIDE_PADDING_CELLS = 2;
+const TEACH_SIDE_PADDING_CELLS = 1;
 const ROLE_CARD = 'card';
 const ROLE_TARGET = 'target';
 const ROLE_IGNORE = 'ignore';
 const TARGET_OPACITY_DEFAULT = 35;
 const DEMO_STORAGE_KEY = 'geometry-motion-v2-demo';
+
+function getIsCompactViewport() {
+  if (typeof window === 'undefined') return false;
+  return window.innerWidth <= 899 || window.matchMedia('(max-width: 899px)').matches;
+}
 
 const wizardSteps = [
   { key: 'upload', label: '上传图片' },
@@ -1619,9 +1624,7 @@ export default function App() {
   const [mobileTeachingTab, setMobileTeachingTab] = useState('cards');
   const [mobileStepsTab, setMobileStepsTab] = useState('play');
   const [mobileMoveDistance, setMobileMoveDistance] = useState(1);
-  const [isCompactViewport, setIsCompactViewport] = useState(() =>
-    typeof window === 'undefined' ? false : window.matchMedia('(max-width: 899px)').matches,
-  );
+  const [isCompactViewport, setIsCompactViewport] = useState(() => getIsCompactViewport());
   const [rows, setRows] = useState(DEFAULT_ROWS);
   const [cols, setCols] = useState(DEFAULT_COLS);
   const [cards, setCards] = useState(() => makeCards(DEFAULT_ROWS, DEFAULT_COLS));
@@ -1684,10 +1687,14 @@ export default function App() {
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 899px)');
-    const updateViewportMode = () => setIsCompactViewport(mediaQuery.matches);
+    const updateViewportMode = () => setIsCompactViewport(getIsCompactViewport());
     updateViewportMode();
     mediaQuery.addEventListener('change', updateViewportMode);
-    return () => mediaQuery.removeEventListener('change', updateViewportMode);
+    window.addEventListener('resize', updateViewportMode);
+    return () => {
+      mediaQuery.removeEventListener('change', updateViewportMode);
+      window.removeEventListener('resize', updateViewportMode);
+    };
   }, []);
 
   const selectedSourceRegion = candidates.find((candidate) => candidate.id === sourceRegionId);
@@ -3376,7 +3383,12 @@ export default function App() {
   const targetImageY = teachingRegion ? teachingLayout.y - teachingRegion.y * sourceScale : 0;
   const targetImageWidth = demoPhoto ? demoPhoto.naturalWidth * sourceScale : 0;
   const targetImageHeight = demoPhoto ? demoPhoto.naturalHeight * sourceScale : 0;
-  const visibleGridRegion = hasGuidedSelection && guidedGridRegion ? guidedGridRegion : teachingRegion;
+  const visibleGridRegion =
+    mode === 'teach' && teachingRegion
+      ? teachingRegion
+      : hasGuidedSelection && guidedGridRegion
+        ? guidedGridRegion
+        : teachingRegion;
   const visibleGridDisplayRect =
     visibleGridRegion && teachingRegion
       ? {
@@ -3390,16 +3402,16 @@ export default function App() {
       : null;
   const mobileTeachingViewBox = useMemo(() => {
     if (!isCompactViewport || !visibleGridDisplayRect) return `0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`;
-    const compactAspectRatio = 0.9;
+    const compactAspectRatio = 0.82;
     const focusWidth = Math.min(
       STAGE_WIDTH,
-      Math.max(visibleGridDisplayRect.width * 1.12, 320),
+      Math.max(visibleGridDisplayRect.width * 1.06, 340),
     );
-    const focusHeight = Math.min(STAGE_HEIGHT, focusWidth / compactAspectRatio);
+    const focusHeight = focusWidth / compactAspectRatio;
     const centerX = visibleGridDisplayRect.x + visibleGridDisplayRect.width / 2;
     const centerY = visibleGridDisplayRect.y + visibleGridDisplayRect.height / 2;
     const focusX = Math.max(0, Math.min(centerX - focusWidth / 2, STAGE_WIDTH - focusWidth));
-    const focusY = Math.max(0, Math.min(centerY - focusHeight / 2, STAGE_HEIGHT - focusHeight));
+    const focusY = centerY - focusHeight / 2;
     return `${focusX} ${focusY} ${focusWidth} ${focusHeight}`;
   }, [isCompactViewport, visibleGridDisplayRect]);
 

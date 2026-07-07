@@ -57,8 +57,23 @@ assert.match(
 );
 assert.match(
   app,
+  /const focusHeight = focusWidth \/ compactAspectRatio;/,
+  'mobile teaching viewBox should allow extra vertical space so wide operation grids are not horizontally clipped',
+);
+assert.match(
+  app,
   /viewBox=\{mode === 'teach' \? mobileTeachingViewBox : `0 0 \$\{STAGE_WIDTH\} \$\{STAGE_HEIGHT\}`\}/,
   'teaching canvas should switch to the focused mobile viewBox in teaching mode',
+);
+assert.match(
+  app,
+  /window\.innerWidth\s*<=\s*899/,
+  'compact viewport detection should also read the actual viewport width',
+);
+assert.match(
+  app,
+  /window\.addEventListener\('resize',\s*updateViewportMode\)/,
+  'compact viewport detection should update on browser resize events',
 );
 assert.match(
   css,
@@ -69,4 +84,14 @@ assert.match(
   css,
   /\.mobile-teaching-drawer\s+\.mobile-tab-panel\s*{[^}]*overflow-y:\s*auto/s,
   'mobile teaching drawer panel should scroll instead of clipping controls',
+);
+assert.match(
+  app,
+  /const TEACH_SIDE_PADDING_CELLS = 1;/,
+  'teaching mode should reserve one blank operation cell on each horizontal side',
+);
+assert.match(
+  app,
+  /const visibleGridRegion =\s*mode === 'teach' && teachingRegion\s*\?\s*teachingRegion\s*:\s*hasGuidedSelection && guidedGridRegion\s*\?\s*guidedGridRegion\s*:\s*teachingRegion/s,
+  'teaching mode should display the expanded operation grid instead of only the source task grid',
 );
