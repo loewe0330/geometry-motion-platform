@@ -2934,6 +2934,23 @@ select,
     scrollbar-width: none;
   }
 
+  .mobile-grid-drawer .mobile-template-row,
+  .mobile-grid-drawer .mobile-stepper-row {
+    grid-auto-columns: unset;
+    grid-auto-flow: initial;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  .mobile-grid-drawer .mobile-template-row button,
+  .mobile-grid-drawer .mobile-stepper-row button {
+    min-width: 0;
+    padding: 0 4px;
+    line-height: 1.15;
+    text-align: center;
+  }
+
   .mobile-template-row::-webkit-scrollbar,
   .mobile-stepper-row::-webkit-scrollbar,
   .mobile-segment-row::-webkit-scrollbar {
@@ -3147,6 +3164,17 @@ select,
   .mobile-bottom-drawer input,
   .mobile-upload-button {
     font-size: 14px;
+  }
+
+  .mobile-grid-drawer .mobile-template-row,
+  .mobile-grid-drawer .mobile-stepper-row {
+    gap: 6px;
+  }
+
+  .mobile-grid-drawer .mobile-template-row button,
+  .mobile-grid-drawer .mobile-stepper-row button {
+    padding: 0 2px;
+    font-size: 13px;
   }
 }
 
