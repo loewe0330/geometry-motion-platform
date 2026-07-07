@@ -50,3 +50,23 @@ assert.match(
   /preserveAspectRatio=\{isCompactViewport\s*\?\s*'xMidYMid slice'\s*:\s*'xMidYMid meet'\}/,
   'mobile teaching canvas should zoom into the work area instead of leaving large grid margins',
 );
+assert.match(
+  app,
+  /mobileTeachingViewBox/,
+  'mobile teaching mode should use a focused viewBox around the work grid',
+);
+assert.match(
+  app,
+  /viewBox=\{mode === 'teach' \? mobileTeachingViewBox : `0 0 \$\{STAGE_WIDTH\} \$\{STAGE_HEIGHT\}`\}/,
+  'teaching canvas should switch to the focused mobile viewBox in teaching mode',
+);
+assert.match(
+  css,
+  /\.mobile-layout-active\.mobile-teaching-mode\s*{[^}]*--mobile-bottom-height:\s*260px/s,
+  'mobile teaching drawer should be tall enough for complete move controls',
+);
+assert.match(
+  css,
+  /\.mobile-teaching-drawer\s+\.mobile-tab-panel\s*{[^}]*overflow-y:\s*auto/s,
+  'mobile teaching drawer panel should scroll instead of clipping controls',
+);

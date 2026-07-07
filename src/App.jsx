@@ -3388,6 +3388,20 @@ export default function App() {
           cols: visibleGridRegion.cols,
         }
       : null;
+  const mobileTeachingViewBox = useMemo(() => {
+    if (!isCompactViewport || !visibleGridDisplayRect) return `0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`;
+    const compactAspectRatio = 0.9;
+    const focusWidth = Math.min(
+      STAGE_WIDTH,
+      Math.max(visibleGridDisplayRect.width * 1.12, 320),
+    );
+    const focusHeight = Math.min(STAGE_HEIGHT, focusWidth / compactAspectRatio);
+    const centerX = visibleGridDisplayRect.x + visibleGridDisplayRect.width / 2;
+    const centerY = visibleGridDisplayRect.y + visibleGridDisplayRect.height / 2;
+    const focusX = Math.max(0, Math.min(centerX - focusWidth / 2, STAGE_WIDTH - focusWidth));
+    const focusY = Math.max(0, Math.min(centerY - focusHeight / 2, STAGE_HEIGHT - focusHeight));
+    return `${focusX} ${focusY} ${focusWidth} ${focusHeight}`;
+  }, [isCompactViewport, visibleGridDisplayRect]);
 
   const activeWizardStep = mode === 'teach' ? 'teach' : wizardStep;
   const activeWizardIndex = Math.max(0, wizardSteps.findIndex((item) => item.key === activeWizardStep));
@@ -4146,7 +4160,7 @@ export default function App() {
             <svg
               ref={svgRef}
               className="teaching-stage"
-              viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`}
+              viewBox={mode === 'teach' ? mobileTeachingViewBox : `0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`}
               preserveAspectRatio={isCompactViewport ? 'xMidYMid slice' : 'xMidYMid meet'}
               role="img"
               aria-label="图片卡片平移和旋转演示区域"

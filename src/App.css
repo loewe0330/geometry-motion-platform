@@ -2663,7 +2663,7 @@ select,
   }
 
   .mobile-layout-active.mobile-teaching-mode {
-    --mobile-bottom-height: 224px;
+    --mobile-bottom-height: 260px;
   }
 
   .mobile-layout-active.mobile-steps-mode {
@@ -2869,6 +2869,12 @@ select,
     overflow: hidden;
   }
 
+  .mobile-teaching-drawer .mobile-tab-panel {
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: 2px;
+  }
+
   .mobile-bottom-drawer button,
   .mobile-bottom-drawer select,
   .mobile-bottom-drawer input,
@@ -2993,9 +2999,10 @@ select,
   .mobile-move-panel {
     display: grid;
     height: 100%;
-    grid-template-columns: minmax(0, 1fr) 112px;
-    gap: 10px;
-    overflow: hidden;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) 96px;
+    gap: 8px;
+    overflow: visible;
   }
 
   .mobile-move-pad {
@@ -3005,7 +3012,7 @@ select,
       "left . right"
       ". down .";
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
+    gap: 6px;
   }
 
   .mobile-move-pad .move-up {
@@ -3031,13 +3038,14 @@ select,
   .mobile-move-panel .mobile-segment-row {
     grid-auto-flow: row;
     grid-auto-columns: unset;
-    grid-template-rows: 22px repeat(3, 1fr);
-    overflow: hidden;
+    grid-template-rows: 20px repeat(3, minmax(40px, 1fr));
+    gap: 6px;
+    overflow: visible;
   }
 
   .mobile-move-panel .mobile-segment-row span {
     color: #55708b;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 950;
     text-align: center;
   }
